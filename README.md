@@ -9,8 +9,8 @@
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)](#-快速开始)
 [![License](https://img.shields.io/badge/License-MIT-3DA639)](#-license)
-[![Build](https://img.shields.io/badge/构建步骤-零构建-success)](#-它是怎么做的)
-[![Data](https://img.shields.io/badge/数据-100%25%20本地-critical)](#-隐私)
+[![Build](https://img.shields.io/badge/%E6%9E%84%E5%BB%BA%E6%AD%A5%E9%AA%A4-%E9%9B%B6%E6%9E%84%E5%BB%BA-success)](#-特性)
+[![Data](https://img.shields.io/badge/%E6%95%B0%E6%8D%AE-100%25%20%E6%9C%AC%E5%9C%B0-critical)](#-隐私)
 
 </div>
 
