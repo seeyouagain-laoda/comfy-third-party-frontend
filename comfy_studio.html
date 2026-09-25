@@ -1,0 +1,3723 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Comfy 第三方前端 · 本地 AI 创作工作台</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#151b23; --panel2:#1b2330; --line:#2a3340; --line2:#394454;
+    --txt:#dde5ef; --muted:#8593a5; --teal:#37c9b6; --blue:#6d8dff; --amber:#f0c674;
+    --red:#f07070; --green:#5fd38a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--txt);font:13px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+  button{cursor:pointer;border:none;border-radius:8px;padding:9px 14px;font:inherit;font-weight:600;
+    color:#05231e;background:linear-gradient(135deg,var(--teal),#48a0ff);transition:.15s}
+  button:hover{filter:brightness(1.08)} button:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);font-weight:500}
+  button.mini{padding:5px 9px;font-size:12px;border-radius:6px}
+  textarea,input,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:8px;font:inherit;resize:vertical}
+  textarea{min-height:96px}
+  label{display:block;margin:10px 0 4px;color:var(--muted);font-size:12px}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .row>.ck{display:flex;align-items:center;gap:6px;min-width:78px}
+  .row>.ck input{width:auto;margin:0}
+
+  header{height:52px;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--teal),var(--blue));
+    display:grid;place-items:center;font-weight:700;color:#04231f;font-size:14px}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  #resbar{margin-left:auto;display:flex;gap:16px;font-size:12px;color:var(--muted);align-items:center;flex-wrap:wrap}
+  #resbar b{color:var(--txt);font-weight:500}
+  .bar{display:inline-block;width:54px;height:5px;border-radius:3px;background:var(--panel2);overflow:hidden;vertical-align:middle;margin-left:5px}
+  .bar i{display:block;height:100%;background:var(--teal)}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+  .ok{background:var(--green)}.bad{background:var(--red)}
+
+  .app{display:grid;grid-template-columns:280px minmax(0,1fr) 296px;height:calc(100% - 52px - 46px);overflow:hidden;
+    transition:grid-template-columns .18s ease}
+  /* 左栏加宽一半（186 → 280px）；历史子面板展开时不额外再拉宽 */
+  .app.navwide{grid-template-columns:300px minmax(0,1fr) 296px}
+  aside.nav{border-right:1px solid var(--line);padding:12px 10px;overflow:hidden;background:var(--panel);
+    display:flex;flex-direction:column}
+
+  /* ---- 左栏：对话历史子面板（挂在「LLM 对话」下方，点该项展开/收起） ---- */
+  #chat-hist-pane{display:flex;flex-direction:column;overflow:hidden;
+    max-height:0;transition:max-height .18s ease;margin:0}
+  #chat-hist-pane.open{max-height:42vh;margin:2px 0 8px}
+  #chat-hist-pane .chist-bar{display:flex;gap:6px;align-items:center;padding:2px 4px 6px 24px}
+  #chat-hist-pane .chist-bar .npbtn{flex:1}
+  #chat-hist-pane #sess-list{overflow:auto;min-height:0;max-height:34vh;padding:0 4px 2px 22px}
+  #chat-hist-pane .sempty{color:var(--muted);font-size:11.5px;padding:8px 2px 8px 22px}
+
+  /* ---- 左栏底部面板：运行日志（2026-09-24 应用户要求在原 1/3 基础上抬高一半 → 约 1/2） ---- */
+  #npane{margin-top:auto;padding-top:8px;border-top:1px solid var(--line);display:flex;flex-direction:column;
+    flex:0 0 51%;min-height:330px;max-height:69%;min-width:0}
+  #npane.collapsed{flex-basis:auto;min-height:0;max-height:none}
+  #npane.collapsed .npbody{display:none}
+  .nphead{display:flex;align-items:center;gap:6px;flex:0 0 auto;padding:0 4px 6px}
+  .nphead .nt{font:11px/1.5 inherit;color:var(--muted);font-weight:600;flex:1}
+  .nphead .nt b{color:var(--teal);font-weight:600}
+  .npfold{padding:3px 6px;border-radius:6px;background:transparent;border:none;color:var(--muted);
+    font:11px/1.4 inherit;font-weight:500}
+  .npfold:hover{color:var(--txt);background:var(--panel2);filter:none}
+  .npbody{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding-top:4px}
+  .npbar{display:flex;gap:5px;align-items:center;flex:0 0 auto;margin-bottom:6px;flex-wrap:wrap}
+  .npbtn{padding:3px 7px;border-radius:6px;background:transparent;border:1px solid var(--line);color:var(--muted);
+    font:10.5px/1.5 inherit;font-weight:500;white-space:nowrap}
+  .npbtn:hover{color:var(--txt);border-color:var(--line2);filter:none}
+  .npbtn.grow{flex:1}
+  .npsel{width:auto;flex:1;min-width:64px;padding:3px 6px;font:10.5px/1.5 inherit;border-radius:6px}
+  #np-log{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
+  #np-log-body{margin-top:0;flex:1 1 auto;min-height:160px;max-height:none;overflow:auto;
+    font:10.5px/1.62 ui-monospace,Consolas,"Microsoft YaHei",monospace;word-break:break-word;
+    white-space:pre-wrap}
+  #np-log-body .lrow{padding:1px 0}
+  #np-log-body .lt{color:#6b7a8d}
+  #np-log-body .lm{color:var(--blue)}
+  #np-log-body .lw{color:var(--amber)}
+  #np-log-body .le{color:var(--red)}
+  .ngroup{color:var(--muted);font-size:11px;margin:14px 0 6px 8px;letter-spacing:.6px}
+  .nitem{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px}
+  .nitem:hover{background:var(--panel2);color:var(--txt)}
+  .nitem.active{background:rgba(55,201,182,.14);color:var(--teal);font-weight:500}
+  .nitem.soon{opacity:.42;cursor:not-allowed}
+  .nitem .ic{width:15px;text-align:center;opacity:.9}
+
+  main.work{overflow:auto;padding:18px 20px 40px}
+  .ptitle{font-size:17px;font-weight:600;margin:0 0 2px}
+  .psub{color:var(--muted);font-size:12px;margin-bottom:14px}
+  /* ---- 图生图顶部 sticky 操作栏（生成/暂停挪到右上）---- */
+  .phead{position:sticky;top:0;z-index:20;background:var(--bg);display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 2px 12px;margin:-2px 0 4px;border-bottom:1px solid var(--line)}
+  .phead .ptitle{margin:0}
+  .phead .psub{margin:0}
+  .phead-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .runbtn{font-size:14px;font-weight:700;padding:10px 22px;border:0;border-radius:9px;cursor:pointer;color:#05231e;background:linear-gradient(135deg,var(--teal),#48a0ff)}
+  .runbtn:hover{filter:brightness(1.08)}
+  .runbtn:disabled{opacity:.6;cursor:default}
+  .batchbtn{flex:1 1 auto;text-align:left;padding:10px 12px;border:1px solid var(--teal);border-radius:9px;background:rgba(55,201,182,.10);color:#cdf3dc;cursor:pointer;font-size:12.5px;line-height:1.6}
+  .batchbtn:hover{background:rgba(55,201,182,.18)}
+  .batchbtn:disabled{opacity:.6;cursor:default}
+  .qico{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--line2);color:#fff;font-size:11px;cursor:help;flex:0 0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+  .card h3{margin:0 0 10px;font-size:13px;color:var(--teal);font-weight:600}
+  .card h3 .hint{color:var(--muted);font-weight:400;font-size:11px;margin-left:6px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg span{padding:5px 12px;font-size:12px;color:var(--muted);cursor:pointer;background:var(--panel2)}
+  .seg span.on{background:rgba(55,201,182,.18);color:var(--teal)}
+  .hint{color:var(--muted);font-size:11.5px;line-height:1.7}
+  /* ---- 优化器「添加第三方大模型」弹窗 ---- */
+  #optmask{position:fixed;inset:0;background:rgba(3,7,12,.62);z-index:60;display:none;
+    align-items:center;justify-content:center}
+  #optmask.on{display:flex}
+  #optdlg{width:min(580px,92vw);max-height:86vh;overflow:auto;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  #optdlg h3{margin:0 0 2px;font-size:14px;color:var(--teal);font-weight:600}
+  .optrow{display:flex;gap:8px;align-items:flex-end}
+  .optrow>*{flex:1}
+  .optrow>button{flex:0 0 auto}
+  .optlist{border:1px solid var(--line);border-radius:8px;margin-top:6px;max-height:190px;overflow:auto}
+  .optlist .it{display:flex;gap:8px;align-items:center;padding:7px 10px;
+    border-bottom:1px solid var(--line);font-size:12px}
+  .optlist .it:last-child{border-bottom:none}
+  .optlist .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .optlist .sub{color:var(--muted);font-size:11px}
+  #optmsg{font-size:12px;min-height:18px;margin-top:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .chip{padding:3px 9px;border-radius:20px;background:var(--panel2);border:1px solid var(--line);
+    font-size:11.5px;color:var(--muted);cursor:pointer}
+  .chip:hover{border-color:var(--teal);color:var(--teal)}
+  .chip.bad{border-color:#7a3b3b;color:#d98c8c;opacity:.72;text-decoration:line-through}
+  .chip.bad:hover{border-color:#b45555;color:#e9a0a0}
+  .chip.ok{border-color:#2f6d5f}
+  .chip .tip{display:none}
+  .chip.bad::after{content:' ✕不兼容';font-size:10px;text-decoration:none}
+  .gsel{gap:8px}
+  .gpill{padding:7px 13px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);
+    font-size:12.5px;color:var(--muted);cursor:pointer;line-height:1.35}
+  .gpill:hover{border-color:var(--teal);color:var(--teal)}
+  .gpill.on{background:rgba(45,212,191,.10);border-color:var(--teal);color:var(--teal)}
+  .gpill .gs{display:block;font-size:10.5px;opacity:.8;margin-top:1px}
+  .slots{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .slot{position:relative;width:70px;height:70px;border:1px dashed var(--line);border-radius:8px;
+    display:grid;place-items:center;color:var(--muted);font-size:11px;cursor:pointer;overflow:hidden;background:var(--panel2)}
+  .slot img,.slot video{width:100%;height:100%;object-fit:cover}
+  .slot .tag{position:absolute;top:2px;left:2px;background:rgba(0,0,0,.65);color:#fff;font-size:9.5px;padding:0 4px;border-radius:4px}
+  .slot .x{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);color:#fff;font-size:10px;
+    width:15px;height:15px;border-radius:4px;display:grid;place-items:center}
+  .slot .ref{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);color:var(--teal);
+    font-size:10px;text-align:center;padding:1px}
+  .gallery{display:flex;flex-wrap:wrap;gap:8px}
+  .gallery img,.gallery video{width:132px;height:132px;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:#000}
+  .log{margin-top:10px;background:#080b0f;border:1px solid var(--line);border-radius:8px;padding:9px;
+    font:11px/1.6 ui-monospace,Consolas,monospace;color:var(--muted);max-height:170px;overflow:auto;white-space:pre-wrap}
+  .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--teal);
+    border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}
+
+  /* ---- 全局任务进度条：底部浮条，有任务才出现（预计多少秒 / 已做多少秒） ---- */
+  body.jobbusy .app{padding-bottom:80px}
+  #jobbar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:none;align-items:center;gap:10px;
+    padding:16px 18px;background:rgba(10,13,17,.95);border-top:1px solid var(--line2);
+    backdrop-filter:blur(8px);font-size:13px;color:var(--txt);box-shadow:0 -6px 22px rgba(0,0,0,.35)}
+  #jobbar.on{display:flex}
+  #jobbar .jbl{font-weight:600;color:var(--teal);white-space:nowrap;max-width:240px;overflow:hidden;
+    text-overflow:ellipsis;flex:0 1 auto}
+  #jobbar .jbp{color:var(--muted);white-space:nowrap;flex:0 0 auto}
+  #jobbar .jbsp{flex:0 0 auto;width:1px;height:24px;background:var(--line2)}
+  #jtrack{flex:1 1 auto;height:18px;min-width:90px;border-radius:5px;background:var(--panel2);
+    border:1px solid var(--line);overflow:hidden;position:relative}
+  #jfill{height:100%;width:0;border-radius:5px;background:linear-gradient(90deg,var(--teal),var(--blue));
+    transition:width .3s ease}
+  #jobbar.indet #jfill{width:34%;border-radius:5px;animation:jslide 1.3s ease-in-out infinite}
+  @keyframes jslide{0%{margin-left:-34%}100%{margin-left:100%}}
+  #jnum,#jtimes{font-variant-numeric:tabular-nums;white-space:nowrap;flex:0 0 auto}
+  #jnum{color:var(--muted)}
+  #jobbar.done #jfill{background:linear-gradient(90deg,#37c9b6,#2f9e6f)}
+  #jobbar.fail #jfill{background:linear-gradient(90deg,#d98c8c,#a84c4c)}
+  #jobbar .jwarn{color:var(--amber);flex:0 0 auto}
+  #jobbar .jx{flex:0 0 auto;padding:2px 8px;border-radius:6px;background:transparent;
+    border:1px solid var(--line2);color:var(--muted);font:11px/1.5 inherit}
+  #jobbar .jx:hover{color:var(--txt);filter:none}
+
+  /* ---- 左栏日志行（.lrow/.lt/.lm/.lw/.le 在面板区已定义，这里只补交互态） ---- */
+  #np-log-body .lrow.hid{display:none}
+  #np-log-body .lrow:hover{background:rgba(255,255,255,.035)}
+  #np-log-body .lrow .lk{color:var(--teal);font-weight:600}
+  #np-log-body .lrow .ltag{display:inline-block;min-width:44px;color:#6b7a8d}
+  #np-log-body::-webkit-scrollbar{width:7px}
+  #np-log-body::-webkit-scrollbar-thumb{background:#2a3440;border-radius:4px}
+  .sempty{color:var(--muted);font-size:11.5px;padding:8px 2px}
+  .sgroup{color:var(--muted);font-size:10.5px;margin:8px 0 4px 2px;letter-spacing:.5px}
+  .slist{display:flex;flex-direction:column;gap:3px}
+  .sitem{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:7px;cursor:pointer;
+    border:1px solid transparent;font-size:11.5px;color:var(--muted)}
+  .sitem:hover{background:var(--panel2);color:var(--txt)}
+  .sitem.on{background:rgba(55,201,182,.12);border-color:rgba(55,201,182,.45);color:var(--teal)}
+  .sitem .st1{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sitem .st2{flex:0 0 auto;font-size:10px;opacity:.7}
+  .sitem .sdel{flex:0 0 auto;opacity:0;padding:0 4px;background:transparent;border:none;
+    color:var(--muted);font-size:11px;font-weight:600}
+  .sitem:hover .sdel{opacity:1}
+  .sitem .sdel:hover{color:var(--red);background:transparent;filter:none}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  button.stopbtn{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:500}
+  button.stopbtn:not(:disabled){background:rgba(240,112,112,.16);border-color:var(--red);color:#ffb9b9}
+  button.stopbtn:not(:disabled):hover{background:rgba(240,112,112,.26);filter:none}
+  .pathbar{margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel)}
+  .pathbar .plabel{color:var(--muted);font-size:11px;margin-bottom:6px}
+  .pathbar .ppath{font:11px/1.55 ui-monospace,Consolas,monospace;color:var(--teal);word-break:break-all;
+    background:#080b0f;border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-bottom:7px}
+  .pathbar .pbtns{display:flex;flex-wrap:wrap;gap:6px}
+  .hist .hbtns{display:flex;gap:5px;margin-top:5px}
+
+  aside.side{border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden;background:var(--panel)}
+  .stabs{display:flex;border-bottom:1px solid var(--line)}
+  .stabs div{flex:1;text-align:center;padding:10px;font-size:12.5px;color:var(--muted);cursor:pointer}
+  .stabs div.on{color:var(--teal);box-shadow:inset 0 -2px 0 var(--teal)}
+  .sbody{flex:1;overflow:auto;padding:12px}
+  .modelcard{border:1px solid var(--line);border-radius:9px;padding:9px 10px;margin-bottom:8px;cursor:pointer;background:var(--panel2)}
+  .modelcard:hover{border-color:var(--teal)}
+  .modelcard.on{border-color:var(--teal);background:rgba(55,201,182,.12)}
+  .modelcard .nm{font-size:12.5px;word-break:break-all}
+  .modelcard .mt{color:var(--muted);font-size:11px;margin-top:3px}
+  .badge{display:inline-block;padding:1px 6px;border-radius:12px;background:var(--panel);border:1px solid var(--line);
+    font-size:10.5px;color:var(--muted);margin-right:4px}
+  .page{display:none}.page.on{display:block}
+  .flexline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .grow{flex:1;min-width:120px}
+  #cs-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99}
+  #cs-modal .mbox{width:min(560px,92vw);margin:8vh auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card h3{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+  .card h3 .caret{font-size:9px;color:var(--muted);transition:transform .15s;margin-left:auto}
+  .card.collapsed h3 .caret{transform:rotate(-90deg)}
+  .card.collapsed > *:not(h3):not(.caret){display:none}
+  .card.collapsed h3{margin:0}
+  .q{display:inline-flex;width:13px;height:13px;border-radius:50%;border:1px solid var(--line);
+    color:var(--muted);font-size:9.5px;align-items:center;justify-content:center;cursor:help;margin-left:4px;vertical-align:-1px}
+  .hist{border:1px solid var(--line);border-radius:9px;padding:8px;margin-bottom:8px;background:var(--panel2)}
+  .hist img,.hist video{width:100%;border-radius:6px;margin-bottom:6px;display:block}
+  .hist .hi{font-size:11px;color:var(--muted);word-break:break-all;line-height:1.5}
+  .hist button{width:100%;margin-top:6px}
+  .sweepgrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .sweepgrid img{width:96px;height:96px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+
+  /* ================= 引擎条（桌面版） ================= */
+  #enginebar{height:46px;display:flex;align-items:center;gap:9px;padding:0 16px;
+    border-bottom:1px solid var(--line);background:var(--panel2);font-size:12px;overflow-x:auto}
+  .ebtn{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:9px;
+    background:var(--panel);border:1px solid var(--line);color:var(--txt);font-weight:600;font-size:12px;white-space:nowrap}
+  .ebtn:hover{border-color:var(--teal);filter:none}
+  .ebtn.on{border-color:var(--green);background:rgba(95,211,138,.10);color:#cdf3dc}
+  .ebtn.busy{border-color:var(--amber);color:#f6dda6}
+  .ebtn.err{border-color:var(--red);color:#ffb9b9}
+  .ebtn .st{font-size:10.5px;color:var(--muted);font-weight:400;
+    max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ebtn.on .st{color:var(--green)}
+  .ebtn.busy .st{color:var(--amber)}
+  .ebtn.ext{border-style:dashed}
+  .eb-sep{width:1px;height:24px;background:var(--line);flex:0 0 1px}
+  #eb-vram{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--muted);white-space:nowrap}
+  #eb-vram .bar{width:108px}
+  #eb-vram b{color:var(--txt);font-weight:500}
+
+  /* ================= 对话页 ================= */
+  .chatnav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .chatnav select{width:auto;min-width:240px;max-width:420px}
+  .warnbox{border:1px solid var(--amber);background:rgba(240,198,116,.10);color:#f6dda6;
+    border-radius:9px;padding:8px 11px;font-size:12px;margin-bottom:10px;display:none}
+  .warnbox.show{display:block}
+  .warnbox b{color:#ffe9b8}
+  .chatwrap{display:flex;flex-direction:column;height:calc(100vh - 52px - 46px - 190px);min-height:360px}
+  .msgs{flex:1;overflow:auto;padding:4px 2px 10px}
+
+  /* ---- 左右分栏气泡：你靠右、AI 靠左（微信 / ChatGPT 那种观感） ----
+     靠的是 flex-direction:row-reverse + .bd 的 align-items，而不是 text-align，
+     这样 av（头像）会一起翻到右侧，气泡宽度也能各自独立约束。 */
+  .msg{display:flex;gap:9px;margin-bottom:14px}
+  .msg.user{flex-direction:row-reverse}
+  .msg .av{flex:0 0 28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:10.5px;font-weight:700}
+  .msg.user .av{background:rgba(109,141,255,.18);color:var(--blue)}
+  .msg.ai .av{background:rgba(55,201,182,.18);color:var(--teal)}
+  .msg.err .av{background:rgba(240,112,112,.18);color:var(--red)}
+  .msg .bd{flex:0 1 auto;max-width:78%;min-width:0;display:flex;flex-direction:column}
+  .msg.user .bd{align-items:flex-end}
+  .msg.ai .bd{align-items:flex-start}
+  .msg .who{color:var(--muted);font-size:11px;margin-bottom:3px;display:flex;gap:8px;align-items:baseline}
+  .msg.user .who{flex-direction:row-reverse}
+  .msg .who .mt{font-size:10.5px;opacity:.75}
+  .bubble{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;
+    white-space:pre-wrap;word-break:break-word;line-height:1.72;max-width:100%}
+  .msg.user .bubble{background:rgba(109,141,255,.13);border-color:rgba(109,141,255,.32);border-top-right-radius:3px}
+  .msg.ai .bubble{border-top-left-radius:3px}
+  .msg.err .bubble{border-color:#7a3b3b;color:#f4b9b9}
+
+  /* ---- 每条回答正下方的元数据行（耗时/首字/字数/速度…） ---- */
+  .mstat{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:5px;
+    padding-top:5px;border-top:1px dashed var(--line);font-size:10.5px;color:var(--muted);
+    font-variant-numeric:tabular-nums;line-height:1.5}
+  .mstat:empty{display:none}
+  .mstat .ms{white-space:nowrap}
+  .mstat .ms b{color:var(--txt);font-weight:500}
+  .mstat.live{color:var(--blue)}
+  .mstat.live .ms b{color:var(--blue)}
+  .mstat.err{color:var(--red);border-top-color:#7a3b3b}
+  .mstat .msbtn{background:transparent;border:none;color:var(--muted);font:inherit;font-weight:500;
+    padding:0 2px;border-radius:4px;cursor:pointer}
+  .mstat .msbtn:hover{color:var(--txt);background:var(--panel2);filter:none}
+  .mstat .sep{opacity:.45}
+
+  /* ---- 会话历史（左栏面板用） ---- */
+  .slist{display:flex;flex-direction:column;gap:3px}
+  .sitem{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:7px;cursor:pointer;
+    border:1px solid transparent;font-size:12px;color:var(--txt)}
+  .sitem:hover{background:var(--panel2);border-color:var(--line)}
+  .sitem.on{background:rgba(55,201,182,.12);border-color:rgba(55,201,182,.45)}
+  .sitem .st1{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sitem .st2{flex:0 0 auto;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .sitem .sdel{flex:0 0 auto;opacity:0;color:var(--muted);font-size:12px;padding:0 2px;background:none;
+    border:none;border-radius:4px;font-weight:500}
+  .sitem:hover .sdel{opacity:1}
+  .sitem .sdel:hover{color:var(--red);background:rgba(240,112,112,.14);filter:none}
+  .sgroup{color:var(--muted);font-size:10.5px;padding:7px 8px 3px;letter-spacing:.4px}
+  .sempty{color:var(--muted);font-size:11.5px;padding:10px 8px;text-align:center}
+  .bubble pre{background:#080b0f;border:1px solid var(--line);border-radius:7px;padding:8px;overflow:auto;
+    font:11.5px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap;margin:7px 0}
+  .bubble code{background:#080b0f;border:1px solid var(--line);border-radius:4px;padding:0 4px;
+    font:11.5px/1.5 ui-monospace,Consolas,monospace;color:#a9e6da}
+  .cur{display:inline-block;width:7px;height:14px;background:var(--teal);vertical-align:-2px;animation:bl .9s steps(2) infinite}
+  @keyframes bl{50%{opacity:0}}
+  /* 思考过程（reasoning_content）：本地 Qwen3.x / DeepSeek-R1 这类会先流式吐推理文本，
+     以前前端只认 delta.content → 思考期间气泡一直空白，用户以为卡住了。 */
+  .think{margin:0 0 7px;border:1px dashed var(--line);border-radius:9px}
+  .think>summary{cursor:pointer;color:var(--muted);font-size:11px;padding:5px 9px;user-select:none}
+  .think .tk{color:var(--muted);font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word;
+    padding:0 10px 8px;max-height:220px;overflow:auto}
+  /* ---- 思维链显眼开关：左=打开(knob 在左,轨道 teal)，右=关闭(knob 在右,轨道灰) ---- */
+  .thinktoggle{display:inline-flex;align-items:center;gap:8px;padding:4px 11px;border-radius:20px;
+    border:1px solid var(--line2);background:var(--panel);cursor:pointer;user-select:none;
+    transition:border-color .18s,box-shadow .18s;font-weight:600}
+  .thinktoggle.on{border-color:var(--teal);box-shadow:0 0 0 3px rgba(55,201,182,.20)}
+  .tt-l,.tt-r{font-size:11px;font-weight:700;letter-spacing:.5px;transition:color .15s}
+  .tt-l{color:var(--muted)} .tt-r{color:var(--muted)}
+  .thinktoggle.on .tt-l{color:var(--teal)}
+  .thinktoggle:not(.on) .tt-r{color:#ff8a5b}
+  .tt-sw{position:relative;width:46px;height:24px;border-radius:13px;background:#56607099;flex:0 0 auto;transition:background .18s}
+  .thinktoggle.on .tt-sw{background:var(--teal)}
+  .tt-sw .tt-kn{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.45);transition:left .18s ease}
+  .thinktoggle:not(.on) .tt-sw .tt-kn{left:24px}
+  .thinktoggle.locked{cursor:not-allowed;opacity:.7;border-color:var(--teal);
+    background:rgba(55,201,182,.08)}
+  .thinktoggle.locked .tt-l{color:var(--teal)} .thinktoggle.locked .tt-r{color:var(--muted)}
+  .composer{border-top:1px solid var(--line);padding-top:10px;position:relative;border-radius:10px}
+  /* —— 对话附件（拖入 / 粘贴 / 选择文件）—— */
+  .composer.dragover{outline:2px dashed var(--teal);outline-offset:-4px;background:rgba(55,201,182,.06)}
+  .composer.dragover-bad{outline:2px dashed #ff7b72;background:rgba(255,123,114,.07)}
+  /* 编辑模式：整块高亮 + 发送按钮变色，避免"我到底是在新发一条还是在改旧的"搞混 */
+  .composer.editing{outline:2px solid var(--amber);outline-offset:-4px;background:rgba(240,198,116,.07)}
+  .composer.editing #chat-send{background:var(--amber);color:#1a1206;font-weight:700}
+  .dragtip{display:none;position:absolute;right:14px;top:8px;font-size:12px;font-weight:600;
+    color:var(--teal);pointer-events:none;z-index:3}
+  .dragtip.bad{color:#ff7b72}
+  .atchbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .atch{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px;max-width:100%}
+  .atch img{width:28px;height:28px;object-fit:cover;border-radius:4px;flex:0 0 auto}
+  .atch .an{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
+  .atch .aw{color:var(--muted);flex:0 0 auto}
+  .atch .ax{cursor:pointer;color:var(--muted);font-weight:700;padding:0 2px;flex:0 0 auto}
+  .atch .ax:hover{color:#ff7b72}
+  .atch.atchzip{border-color:var(--amber)}
+  .atch.atchzip .aw{color:var(--amber)}
+  /* —— 上下文占用仪表（系统提示 / 历史 / 附件）—— */
+  .ctxbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:0 0 9px;
+    font-size:11.5px;color:var(--muted);line-height:1.5}
+  .ctxbar .ctxn{color:var(--txt);font-weight:700}
+  .ctxbar .ctxn.over{color:var(--amber)}
+  .ctxbar .ctxbar-i{display:inline-block;width:88px;height:5px;border-radius:3px;
+    background:var(--line);overflow:hidden;vertical-align:middle;flex:0 0 auto}
+  .ctxbar .ctxbar-i i{display:block;height:100%;background:var(--teal);transition:width .25s}
+  .ctxbar .ctxbar-i.over i{background:var(--amber)}
+  .ctxbar .ctxbar-i.hot i{background:var(--amber)}
+  .ctxbar .ctxtitle{color:var(--muted);font-weight:600}
+  .ctxbar .ctxpct{font-weight:700;font-size:12.5px;color:var(--teal)}
+  .ctxbar .ctxpct.hot{color:var(--amber)}
+  .ctxbar .ctxpct.over{color:#ff7b72}
+  .ctxbar .ctxzip{color:var(--amber);font-weight:600}
+  .ctxbar .ctxwarn{color:#ff7b72;font-weight:600}
+  .ctxbar .ctxsw{cursor:pointer;border:1px solid var(--line);border-radius:6px;
+    padding:1px 7px;color:var(--muted);flex:0 0 auto}
+  .ctxbar .ctxsw:hover{color:var(--txt);border-color:var(--line2)}
+  .composer textarea{min-height:76px;max-height:200px}
+  .chatbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .sysrow{display:flex;gap:8px;align-items:flex-start;margin-top:8px}
+  .sysrow textarea{min-height:46px}
+  .msgs .empty{color:var(--muted);text-align:center;padding:40px 0;font-size:12.5px}
+
+  /* ================= 设置页 ================= */
+  .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}
+  @media(max-width:1240px){.sgrid{grid-template-columns:1fr}}
+  .kv{display:flex;align-items:center;gap:8px}
+  .kv>label{margin:0;flex:0 0 132px}
+  .kv>select,.kv>input{flex:1}
+  .engrow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;align-items:center;margin-bottom:7px}
+  .engrow .lbl{color:var(--muted);font-size:12px}
+  .engrow input,.engrow select{font:11.5px/1.5 ui-monospace,Consolas,monospace;padding:6px 8px}
+  .mono{font:11.5px/1.6 ui-monospace,Consolas,monospace;word-break:break-all}
+  .modcard{border:1px solid var(--line);border-radius:9px;padding:7px 10px;margin-bottom:6px;background:var(--panel2);
+    display:flex;gap:10px;align-items:center;font-size:12px}
+  .modcard.on{border-color:var(--teal);background:rgba(55,201,182,.10)}
+  .modcard.missing{opacity:.5;border-style:dashed}
+  .modcard.missing .nm{color:var(--muted)}
+  .modcard .nm{flex:1;min-width:0;word-break:break-all}
+  .modcard .sz{color:var(--muted);flex:0 0 auto}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">C³</div>
+  <h1>Comfy 第三方前端</h1>
+  <span class="hint" id="subtitle">文生图 · 图生图 · MiniMax H3 视频</span>
+  <div id="resbar">
+    <span><span id="cdot" class="dot bad"></span><span id="ctxt">ComfyUI 检测中…</span></span>
+    <span>显存 <b id="vram">–</b></span>
+    <span>CPU <b id="cpu">–</b></span>
+    <span>内存 <b id="ram">–</b></span>
+    <span>磁盘 <b id="disk">–</b></span>
+  </div>
+</header>
+
+<!-- ================= 引擎条：手动启动 + 状态灯 + 检测 ================= -->
+<div id="enginebar">
+  <span class="hint" style="flex:0 0 auto">引擎</span>
+  <!-- 文生图 / 图生图 / H3 视频全部走同一个 ComfyUI 引擎（127.0.0.1:8188），
+       原来「ComfyUI 绘图」「H3 视频」是同一个引擎的两张脸，已按需求合并成一个。 -->
+  <button class="ebtn" id="eb-comfy" data-eid="comfy" title="ComfyUI 引擎：文生图 / 图生图 / H3 视频共用。点击启动（已在运行则点击停止）">
+    <span class="dot bad"></span>Comfy<span class="st" id="st-comfy">未运行</span></button>
+  <button class="ebtn" id="eb-llm" data-eid="llm" title="点击启动本地 LLM 文字生成（llama.cpp）">
+    <span class="dot bad"></span>LLM 文字生成<span class="st" id="st-llm">未运行</span></button>
+  <span class="eb-sep"></span>
+  <button class="ebtn" id="eb-detect" title="逐个探测进程 / 端口 / HTTP 探针 / 显存，确认到底有没有真正打开">
+    🔍 检测运行状态</button>
+  <button class="ebtn" id="eb-stopall" title="停掉本程序启动的所有引擎">⏹ 全部停止</button>
+  <button class="ebtn" id="eb-quit" title="停掉全部引擎并关闭后端（关掉浏览器窗口也会自动这样）">⏻ 全部停止并退出</button>
+  <span id="eb-vram">显存 <b id="eb-vram-txt">–</b><span class="bar"><i id="eb-vram-bar" style="width:0"></i></span>
+    <span id="eb-note" class="hint"></span></span>
+</div>
+
+<!-- 引擎检测 / 冲突提示弹窗 -->
+<div id="eb-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120">
+  <div style="width:min(640px,94vw);margin:7vh auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;max-height:80vh;overflow:auto">
+    <h3 id="eb-modal-title" style="margin:0 0 10px;font-size:14px;color:var(--teal)">检测结果</h3>
+    <div id="eb-modal-body" class="hint"></div>
+    <div class="flexline" style="margin-top:14px;justify-content:flex-end">
+      <button class="ghost" id="eb-modal-extra" style="display:none">仍然启动</button>
+      <button id="eb-modal-ok">知道了</button>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <aside class="nav">
+    <div class="ngroup">创作</div>
+    <div class="nitem active" data-page="txt2img"><span class="ic">▣</span>文生图</div>
+    <div class="nitem" data-page="img2img"><span class="ic">▤</span>图生图</div>
+    <div class="nitem" data-page="h3"><span class="ic">▶</span>视频生成</div>
+    <div class="ngroup">对话</div>
+    <div class="nitem" data-page="chat" id="nav-chat"><span class="ic">💬</span>LLM 对话</div>
+    <!-- 对话历史：挂在「LLM 对话」下方。点「LLM 对话」展开/收起；聊天页的「☰ 历史」也控制它。 -->
+    <div id="chat-hist-pane">
+      <div class="chist-bar">
+        <button class="npbtn" id="chat-new" title="新建一个空白对话（当前是空对话时会直接复用）">＋ 新对话</button>
+      </div>
+      <div id="sess-list"></div>
+    </div>
+    <div class="ngroup">系统</div>
+    <div class="nitem" data-page="settings"><span class="ic">⚙</span>设置</div>
+
+    <!-- ===== 左栏底部面板：运行日志（占整体约 1/3，可整块收起） ===== -->
+    <div id="npane" data-tab="log">
+      <div class="nphead">
+        <span class="nt">📋 运行日志 <b id="npn-log"></b></span>
+        <button class="npfold" id="npfold" title="收起 / 展开日志">▾</button>
+      </div>
+      <div class="npbody" id="npbody">
+        <div class="npsec" id="np-log">
+          <div class="npbar">
+            <select id="log-filter" class="npsel" title="只看某个模块的日志">
+              <option value="">全部</option>
+              <option value="task">任务</option>
+              <option value="prog">采样进度</option>
+              <option value="img">图像</option>
+              <option value="h3">视频</option>
+              <option value="chat">对话</option>
+              <option value="engine">引擎</option>
+              <option value="ws">进度通道</option>
+              <option value="ui">界面</option>
+            </select>
+            <button class="npbtn" id="log-copy" title="复制当前显示的日志">复制</button>
+            <button class="npbtn" id="log-open" title="把当前显示的日志存成 txt 到下载目录">存成文件</button>
+            <button class="npbtn" id="log-dir" title="在资源管理器里打开后端日志目录（按天落盘的完整日志）">📂 目录</button>
+            <button class="npbtn" id="log-clear" title="清空日志">清空</button>
+          </div>
+          <div id="np-log-body" class="log"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="work">
+    <!-- ============ 文生图 ============ -->
+    <section class="page on" id="p-txt2img">
+      <h2 class="ptitle">文生图 <span class="hint">/ Text to Image</span></h2>
+      <div class="psub">ComfyUI 直连 · Qwen-Image 2.1 GGUF 工作流</div>
+
+      <div class="card">
+        <h3>描述 <span class="hint">描述模式：单条 / 批量（每行一条）</span></h3>
+        <div class="seg" data-seg="t2i-mode"><span class="on" data-v="single">单条描述</span><span data-v="batch">批量描述</span></div>
+        <label>正向描述（中文即可，工作流走 Qwen 文本编码器）</label>
+        <textarea id="t2i-prompt" class="promptbox" placeholder="例如：一位身着异域服饰的女子在沙漠中弹奏乐器，音符化为环绕飞舞的发光丝绸…"></textarea>
+        <textarea id="t2i-batch" style="display:none;min-height:110px" placeholder="批量模式：每行一条提示词"></textarea>
+        <div class="flexline" style="margin-top:6px;align-items:center;gap:8px">
+          <span class="hint">优化器</span>
+          <div class="seg" data-seg="opt-prov"><span class="on" data-v="gemini">Gemini 3.8 Flash</span><span data-v="glm">GLM-4.7-Flash</span></div>
+          <button class="ghost mini opt-add" title="添加第三方 OpenAI 兼容模型到优化器（自定义接口地址 / API Key / 模型名）">＋ 添加模型</button>
+        </div>
+        <div class="flexline" style="margin-top:6px">
+          <button class="ghost mini" id="t2i-struct">结构化描述（AI）</button>
+          <button class="ghost mini" id="t2i-interrogate">📷 反推描述</button>
+        </div>
+        <label>负向描述（预置通用质量词）</label>
+        <textarea id="t2i-neg" style="min-height:46px"></textarea>
+      </div>
+
+      <div class="card">
+        <h3>生成设置</h3>
+        <div class="row">
+          <div><label>步数</label><input id="t2i-steps" type="number"></div>
+          <div><label>CFG</label><input id="t2i-cfg" type="number" step="0.1"></div>
+          <div><label>张数</label><input id="t2i-batchsize" type="number"></div>
+        </div>
+        <div class="row">
+          <div><label>宽</label><input id="t2i-w" type="number"></div>
+          <div><label>高</label><input id="t2i-h" type="number"></div>
+          <div><label>种子（-1=随机）</label><input id="t2i-seed" type="number"></div>
+        </div>
+        <div class="row">
+          <div><label>扫种子张数（网格对比）</label><input id="t2i-sweep" type="number" value="4" min="1" max="8"></div>
+          <div style="display:flex;align-items:flex-end"><button class="ghost" id="t2i-sweep-run" style="width:100%">扫种子出图</button></div>
+        </div>
+        <div class="sweepgrid" id="t2i-sweepgrid"></div>
+      </div>
+
+      <div class="card">
+        <h3>模型组 <span class="hint">点一下切换整套配方</span></h3>
+        <div class="chips gsel" id="mg-t2i"></div>
+        <h3 style="margin-top:14px">底模 <span class="hint">按模式门禁过滤</span></h3>
+        <select id="t2i-unet"></select>
+        <div class="flexline" style="margin-top:8px">
+          <button class="ghost mini" data-import="unets">导入底模</button>
+          <span class="hint" id="t2i-unet-path"></span>
+        </div>
+        <h3 style="margin-top:14px">LoRA 叠加 <span class="hint">单独导入，与底模互不影响</span></h3>
+        <div id="t2i-loras" class="chips"></div>
+        <div class="flexline" style="margin-top:8px">
+          <button class="ghost mini" data-import="loras">导入 LoRA</button>
+        </div>
+        <p class="hint">勾选即叠加；工作流若无 LoraLoader 节点，后端会在日志里明确提示（不静默忽略）。</p>
+      </div>
+
+      <div class="flexline">
+        <button id="t2i-run">生成</button>
+        <button class="stopbtn" id="t2i-stop" disabled>⏹ 暂停生成</button>
+        <button class="ghost" id="t2i-rnd">随机种子</button>
+      </div>
+      <div class="pathbar" id="t2i-pathbar"></div>
+      <div class="log" id="t2i-log"></div>
+    </section>
+
+    <!-- ============ 图生图 ============ -->
+    <section class="page" id="p-img2img">
+      <div class="phead" id="i2i-head">
+        <div>
+          <h2 class="ptitle">图生图 <span class="hint">/ Image to Image</span></h2>
+          <div class="psub">Qwen-Image-Edit-2511 多参考图编辑工作流</div>
+        </div>
+        <div class="phead-actions">
+          <button class="stopbtn" id="i2i-stop" disabled>⏹ 暂停生成</button>
+          <button class="runbtn" id="i2i-run">▶ 生成</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>描述</h3>
+        <label>正向描述</label>
+        <textarea id="i2i-prompt" class="promptbox" placeholder="例如：图中的女孩的衣服换成汉服，人物保持一致"></textarea>
+        <div class="flexline" style="margin-top:6px;align-items:center;gap:8px">
+          <span class="hint">优化器</span>
+          <div class="seg" data-seg="opt-prov"><span class="on" data-v="gemini">Gemini 3.8 Flash</span><span data-v="glm">GLM-4.7-Flash</span></div>
+          <button class="ghost mini opt-add" title="添加第三方 OpenAI 兼容模型到优化器（自定义接口地址 / API Key / 模型名）">＋ 添加模型</button>
+        </div>
+        <div class="flexline" style="margin-top:6px">
+          <button class="ghost mini" id="i2i-struct">结构化描述（AI，可读参考图）</button>
+          <button class="ghost mini" id="i2i-interrogate">📷 反推描述</button>
+        </div>
+        <label>负向描述</label>
+        <textarea id="i2i-neg" style="min-height:46px"></textarea>
+      </div>
+
+      <div class="card">
+        <h3>参考图</h3>
+        <p class="hint" style="margin:-2px 0 8px">本模板需要参考图才能编辑：先点「添加图片」上传（双图/多图编辑请先切到「多参考图」）。<b>图槽为空会被直接拦截</b>，不要依赖工作流自带的示例图名。</p>
+        <div class="flexline">
+          <div style="flex:0 0 150px"><label>重绘幅度 Denoise</label><input id="i2i-denoise" type="number" step="0.05"></div>
+          <div style="flex:0 0 auto;align-self:flex-end">
+            <div class="seg" data-seg="i2i-refkind"><span class="on" data-v="single">单参考图</span><span data-v="multi">多参考图</span></div>
+          </div>
+        </div>
+        <div class="slots" id="i2i-slots"></div>
+        <input id="i2i-file" type="file" accept="image/*" multiple hidden>
+        <div class="flexline" style="margin-top:8px">
+          <button class="ghost mini" id="i2i-add">添加图片</button>
+          <button class="ghost mini" id="i2i-folder">从文件夹批量导入</button>
+          <button class="ghost mini" id="i2i-clear">清空</button>
+        </div>
+        <input id="i2i-folderinput" type="file" accept="image/*" webkitdirectory directory multiple hidden>
+      </div>
+
+      <div class="card" id="i2i-batchcard">
+        <h3>📁 批量处理文件夹 <span class="hint">一键跑完整个文件夹</span></h3>
+        <p class="hint" style="margin:-2px 0 10px">选一个文件夹 → 用当前提示词/参数，把里面<b>每一张图片</b>依次作为参考图（image_1）跑图生图，逐个产出结果。上方「图槽」<b>有图</b>→那张当 image_2 风格参考套到所有图；图槽<b>为空</b>→纯按提示词自编辑（同图同时作 image_1 与 image_2）。</p>
+        <div class="flexline" style="align-items:stretch">
+          <button class="batchbtn" id="i2i-batch">📁 批量处理文件夹<br><span style="opacity:.82">选一个文件夹 → 对里面所有图片用同一提示词逐个生成</span></button>
+          <span class="qico" id="i2i-batch-q" title="点此按钮会弹出文件夹选择框：把文件夹里每张图片依次作为参考图(image_1)跑图生图。若上方图槽放了图，则那张当 image_2 风格参考；若没放，则纯按提示词自编辑(同图作 image_1+image_2)。处理按顺序逐个进行，进度会显示在下方的批量进度条中，可点「暂停生成」中断。">?</span>
+        </div>
+        <div class="pathbar" id="i2i-batchbar" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h3>生成设置</h3>
+        <div class="row">
+          <div><label>步数</label><input id="i2i-steps" type="number"></div>
+          <div><label>CFG</label><input id="i2i-cfg" type="number" step="0.1"></div>
+          <div><label>张数</label><input id="i2i-batchsize" type="number"></div>
+        </div>
+        <div class="row">
+          <div><label>最长边</label><input id="i2i-longest" type="number"></div>
+          <div><label>种子（-1=随机）</label><input id="i2i-seed" type="number"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>模型组 <span class="hint">点一下切换整套配方</span></h3>
+        <div class="chips gsel" id="mg-i2i"></div>
+        <h3 style="margin-top:14px">底模</h3>
+        <select id="i2i-unet"></select>
+        <div class="flexline" style="margin-top:8px"><button class="ghost mini" data-import="unets">导入底模</button></div>
+        <h3 style="margin-top:14px">LoRA 叠加 <span class="hint">单独导入</span></h3>
+        <div id="i2i-loras" class="chips"></div>
+        <div class="flexline" style="margin-top:8px"><button class="ghost mini" data-import="loras">导入 LoRA</button></div>
+      </div>
+
+      <div class="flexline">
+        <button class="ghost" id="i2i-rnd">随机种子</button>
+      </div>
+      <div class="pathbar" id="i2i-pathbar"></div>
+      <div class="log" id="i2i-log"></div>
+    </section>
+
+    <!-- ============ H3 视频 ============ -->
+    <section class="page" id="p-h3">
+      <h2 class="ptitle">视频生成（MiniMax-H3）<span class="hint">/ MiniMax H3 Video</span></h2>
+      <div class="psub">Ref2VA 全参考模式 · 六段式提示词 · 两阶段放大</div>
+
+      <div class="card">
+        <h3>描述 <span class="hint">描述模式：单条 / 批量</span></h3>
+        <div class="seg" data-seg="h3-mode"><span class="on" data-v="single">单条描述</span><span data-v="batch">批量描述</span></div>
+
+        <div class="flexline" style="margin-top:10px;align-items:center;gap:8px">
+          <span class="hint">优化器</span>
+          <div class="seg" data-seg="opt-prov"><span class="on" data-v="gemini">Gemini 3.8 Flash</span><span data-v="glm">GLM-4.7-Flash</span></div>
+          <button class="ghost mini opt-add" title="添加第三方 OpenAI 兼容模型到优化器（自定义接口地址 / API Key / 模型名）">＋ 添加模型</button>
+        </div>
+        <div class="flexline" style="margin-top:10px">
+          <div class="grow"><label>提示词模板</label><select id="h3-guide"></select></div>
+          <div style="flex:0 0 auto;align-self:flex-end">
+            <button class="ghost mini" id="h3-optimize">AI 优化提示词</button>
+          </div>
+        </div>
+        <p class="hint" id="h3-opt-hint">优化会调用 OpenAI 兼容接口（本地 :8181 的 Qwen3-VL-8B 或 NAS 网关）；读图需视觉模型，未启动则不影响手动生成。</p>
+
+        <label>提示词 Prompt</label>
+        <textarea id="h3-prompt" class="promptbox" style="min-height:190px" placeholder="subject_definitions:&#10;summary:&#10;retention_analysis:&#10;detailed_description:&#10;overall_soundscape:&#10;non_diegetic_music:"></textarea>
+        <textarea id="h3-batch" style="display:none;min-height:110px" placeholder="批量模式：每行一条提示词"></textarea>
+        <details style="margin-top:8px">
+          <summary class="hint">分栏组装（填好后点下方按钮拼成六段式）</summary>
+          <label>subject_definitions</label><textarea id="h3-subject"></textarea>
+          <label>summary</label><textarea id="h3-summary"></textarea>
+          <label>retention_analysis</label><textarea id="h3-retention"></textarea>
+          <label>detailed_description</label><textarea id="h3-detail"></textarea>
+          <label>overall_soundscape</label><textarea id="h3-sound"></textarea>
+          <label>non_diegetic_music</label><textarea id="h3-music"></textarea>
+          <button class="ghost mini" id="h3-assemble" style="margin-top:8px">组装到上方</button>
+        </details>
+      </div>
+
+      <div class="card">
+        <h3>参考素材 <span class="hint">点击格子导入；点「引用」把标签写进提示词</span></h3>
+        <label>参考图片（最多 9 张 → &lt;Picture N&gt;）</label>
+        <div class="slots" id="h3-imgs"></div>
+        <label>参考音频（最多 3 个 → &lt;Audio N&gt;）</label>
+        <div class="slots" id="h3-audios"></div>
+        <label>参考视频（最多 3 段，2–15 秒 → &lt;Video N&gt;）</label>
+        <div class="slots" id="h3-videos"></div>
+        <input id="h3-imgfile" type="file" accept="image/*" multiple hidden>
+        <input id="h3-audiofile" type="file" accept="audio/*" multiple hidden>
+        <input id="h3-videofile" type="file" accept="video/*" multiple hidden>
+      </div>
+
+      <div class="card">
+        <h3>已保存的素材组 <span class="hint">浏览器本地保存，一键回落</span></h3>
+        <div class="flexline">
+          <button class="ghost mini" id="h3-savegroup">保存当前素材 + 描述为一组</button>
+          <button class="ghost mini" id="h3-cleargroups">清空所有组</button>
+        </div>
+        <div id="h3-groups" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h3>生成设置</h3>
+        <div class="row">
+          <div><label>生成模式 mode</label>
+            <select id="h3-genmode"><option value="reference">reference（图+文→视频）</option>
+              <option value="image">image（文→视频 / 首尾帧）</option></select></div>
+          <div><label>采样步数</label><input id="h3-steps" type="number"></div>
+          <div><label>种子（-1=随机）</label><input id="h3-seed" type="number"></div>
+        </div>
+        <div class="row">
+          <div><label>时长（秒）</label><input id="h3-dur" type="number"></div>
+          <div><label>帧率 FPS</label><input id="h3-fps" type="number"></div>
+          <div><label>SAGE / VSA 加速</label>
+            <select id="h3-vas"><option value="1">开启</option><option value="0">关闭</option></select></div>
+        </div>
+        <div class="row">
+          <div><label>1 阶段宽</label><input id="h3-s1w" type="number"></div>
+          <div><label>1 阶段高</label><input id="h3-s1h" type="number"></div>
+          <div><label>2 阶段宽</label><input id="h3-s2w" type="number"></div>
+          <div><label>2 阶段高</label><input id="h3-s2h" type="number"></div>
+        </div>
+        <p class="hint">两阶段为潜空间放大；本机 16GB 显存需 comfy-aimdo 动态装卸载，实测 20步+4步LoRA+SAGE ≈ 64–111 秒/条。</p>
+      </div>
+
+      <div class="card">
+        <h3>模型组 <span class="hint">点一下切换整套配方</span></h3>
+        <div class="chips gsel" id="mg-h3"></div>
+        <h3 style="margin-top:14px">底模</h3>
+        <select id="h3-unet"></select>
+        <div class="flexline" style="margin-top:8px"><button class="ghost mini" data-import="unets">导入底模</button></div>
+        <h3 style="margin-top:14px">LoRA 叠加 <span class="hint">单独导入</span></h3>
+        <div id="h3-loras" class="chips"></div>
+        <div class="flexline" style="margin-top:8px"><button class="ghost mini" data-import="loras">导入 LoRA</button></div>
+      </div>
+
+      <div class="flexline">
+        <button id="h3-run">提交视频任务</button>
+        <button class="stopbtn" id="h3-stop" disabled>⏹ 暂停生成</button>
+      </div>
+      <div class="pathbar" id="h3-pathbar"></div>
+      <p class="hint" style="margin-top:8px">⚠️ H3 与文生图<b>共用同一个 ComfyUI 引擎</b>（<code>127.0.0.1:8188</code>），用的是 ComfyUI 原生 MiniMax-H3 节点，
+        不需要第三方整合包 / <code>它的 API 服务</code> 那套东西 —— 换台机器只要有 ComfyUI 就能跑。
+        点顶部引擎条的「<b>H3 视频</b>」（或「<b>ComfyUI 绘图</b>」）按钮手动拉起，「检测运行状态」可确认是否真的起来了。当前状态：<span id="h3-state">检测中…</span></p>
+      <div class="log" id="h3-log"></div>
+    </section>
+
+    <!-- ============ LLM 对话 ============ -->
+    <section class="page" id="p-chat">
+      <h2 class="ptitle">LLM 对话 <span class="hint">/ Local &amp; Cloud Chat</span></h2>
+      <div class="psub">本地 llama.cpp 与云端网关统一入口 · 逐字流式 · 上下文多轮</div>
+
+      <div class="chatnav">
+        <select id="chat-target"></select>
+        <button class="ghost mini" id="chat-start">⚡ 启动本地引擎</button>
+        <button class="ghost mini" id="chat-detect">🔍 检测</button>
+        <button class="ghost mini" id="chat-stopeng" style="display:none">⏹ 停本地引擎</button>
+        <span class="hint" id="chat-engstate">引擎状态检测中…</span>
+        <span class="grow"></span>
+        <button class="ghost mini" id="chat-hist" title="展开 / 收起「LLM 对话」下方的历史对话列表">☰ 历史</button>
+        <div class="thinktoggle on" id="think-toggle" role="switch" aria-checked="true" title="思维链（思考过程）：开＝模型先推理再回答；关＝直接回答。默认开，点一下切换。">
+          <span class="tt-l">打开</span>
+          <span class="tt-sw" id="think-sw"><span class="tt-kn"></span></span>
+          <span class="tt-r">关闭</span>
+        </div>
+        <button class="ghost mini" id="chat-params">参数 ▾</button>
+        <button class="ghost mini" id="chat-clear">清空对话</button>
+      </div>
+      <div class="warnbox" id="chat-warn"></div>
+
+      <div class="chatwrap">
+        <div class="msgs" id="chat-msgs"></div>
+        <div class="composer" id="chat-composer">
+          <div class="atchbar" id="chat-atch" style="display:none"></div>
+          <div class="ctxbar" id="chat-ctx" style="display:none"></div>
+          <div class="dragtip" id="chat-dragtip">松开添加到对话</div>
+          <textarea id="chat-input" placeholder="Enter 发送 · Shift+Enter 换行 · 可直接拖入 txt/md/csv/代码或图片（Ctrl+V 也能粘贴）（本地 27B 互斥：发消息时会自动关掉 ComfyUI）"></textarea>
+          <div class="chatbar">
+            <button id="chat-send">发送</button>
+            <button class="ghost" id="chat-edit-cancel" style="display:none" title="放弃这次修改（Esc）">取消修改</button>
+            <button class="ghost" id="chat-attach-btn" title="添加附件（也可直接把文件拖进输入框，或 Ctrl+V 粘贴截图）
+· 纯文本：txt / md / json / csv / py / js / html / log / xml / yaml / ini / bat / sql 等
+· 图片：png / jpg / webp / gif / bmp（模型有视觉能力，可直接看图）
+其余格式（Word / Excel / PDF / 压缩包 / 音视频）一律不接收，会给出替代做法。">📎 附件</button>
+            <input id="chat-file" type="file" multiple hidden accept=".txt,.md,.markdown,.json,.csv,.tsv,.log,.xml,.yaml,.yml,.ini,.cfg,.conf,.py,.js,.ts,.jsx,.tsx,.html,.htm,.css,.bat,.cmd,.ps1,.sh,.sql,.go,.java,.cpp,.c,.h,.rs,.toml,.vue,text/*,image/*">
+            <button class="stopbtn" id="chat-stop" disabled>⏹ 停止生成</button>
+            <button class="ghost" id="chat-regen">↻ 重新生成</button>
+            <button class="ghost" id="chat-toimg" title="把最后一条回答整理成绘图提示词，跳到文生图">↦ 转成绘图提示词</button>
+            <span class="hint" id="chat-stat"></span>
+          </div>
+          <div class="row" id="chat-paramrow" style="display:none;margin-top:8px">
+            <div><label>temperature</label><input id="chat-temp" type="number" step="0.05" value="0.7"></div>
+            <div><label>top_p</label><input id="chat-topp" type="number" step="0.05" value="0.8"></div>
+            <div><label>max_tokens（单次输出上限，引擎硬顶 8192）</label><input id="chat-maxtok" type="number" value="7000" max="8192" min="1"></div>
+            <div><label>上下文轮数</label><input id="chat-turns" type="number" value="12"></div>
+            <!-- 思维链开关已移到聊天页头部 #think-toggle，这里不再放复选框 -->
+          </div>
+          <div class="sysrow">
+            <div class="grow"><label>系统提示词（可选）</label>
+              <textarea id="chat-sys" placeholder="例如：你是绘图提示词助手，回答尽量简洁，不要输出思考过程。"></textarea></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 设置 ============ -->
+    <section class="page" id="p-settings">
+      <h2 class="ptitle">设置 <span class="hint">/ Settings</span></h2>
+      <div class="psub">引擎命令、互斥与关窗行为、模型库链接、云端 Key · 保存后写回配置文件</div>
+
+      <div class="card">
+        <h3>应用行为</h3>
+        <div class="sgrid">
+          <div class="kv"><label>引擎互斥</label>
+            <select id="set-exclusive">
+              <option value="all">全局互斥（同时只能开一个引擎）</option>
+              <option value="group">仅同组互斥（绘图组内互斥，LLM 可并存）</option>
+              <option value="none">不互斥（各自手动管）</option>
+            </select></div>
+          <div class="kv"><label>关闭窗口时</label>
+            <select id="set-close">
+              <option value="stop_engines">一起关掉（清进程树，释放显存）</option>
+              <option value="keep">保留引擎继续跑</option>
+            </select></div>
+          <div class="kv"><label>配置文件</label><div class="mono hint" id="set-cfg">–</div></div>
+          <div class="kv"><label>用户数据目录</label><div class="mono hint" id="set-home">–</div></div>
+        </div>
+        <div class="flexline" style="margin-top:12px">
+          <button id="set-save-app">保存应用设置</button>
+          <span class="hint" id="set-msg"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>LLM 模型库 <span class="hint">X:\你的llama.cpp\models · 目录联接(mklink /J)会自动穿透</span></h3>
+        <div id="set-models" style="margin-bottom:10px"></div>
+        <div class="flexline">
+          <button class="ghost mini" id="set-models-refresh">↻ 重新扫描</button>
+          <span class="hint" id="set-vramest"></span>
+        </div>
+        <label style="margin-top:12px">把<b>外部模型目录</b>链接进库（零拷贝，不占额外空间）</label>
+        <div class="kv">
+          <input id="set-link-src" placeholder="例如 X:\你的模型目录\Qwen3.8-27B">
+          <button class="ghost mini" id="set-link-btn" style="flex:0 0 auto">创建链接</button>
+        </div>
+        <p class="hint" id="set-link-msg">用 <code>mklink /J</code> 在 <code>X:\你的llama.cpp\models</code> 下建目录联接；删除链接不会影响原目录。</p>
+      </div>
+
+      <div class="card">
+        <h3>ComfyUI 地址 <span class="hint">状态检测与任务提交都走这里</span></h3>
+        <div class="kv"><label>ComfyUI</label>
+          <input id="set-comfy-url" placeholder="http://127.0.0.1:8188"></div>
+        <div class="kv" style="margin-top:8px"><label>H3 引擎</label>
+          <input id="set-h3-url" placeholder="留空＝跟随上面的 ComfyUI 地址"></div>
+        <div class="flexline" style="margin-top:10px">
+          <button id="set-save-comfy">保存并测试连接</button>
+          <span class="hint" id="set-comfy-msg"></span>
+        </div>
+        <p class="hint">用别人已有的 ComfyUI / 反代时写成 <code>http://用户:密码@192.168.1.100:8188</code>；
+          密码回显成 <code>***</code>，只改端口/主机时不必重填密码。保存后会同时更新「状态检测」和
+          「任务提交」两处地址，并立刻连一次 <code>/system_stats</code> 验证。</p>
+      </div>
+
+      <div class="card">
+        <h3>引擎命令 <span class="hint">路径 / 参数 / 端口；改完点保存</span></h3>
+        <div id="set-engines"></div>
+        <div class="flexline" style="margin-top:10px">
+          <button id="set-save-engines">保存引擎配置</button>
+          <span class="hint" id="set-eng-msg"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>对话目标 <span class="hint">api_url / 模型名 / Key；保存后立即生效</span></h3>
+        <div id="set-targets"></div>
+        <div class="flexline" style="margin-top:10px">
+          <button id="set-save-targets">保存对话目标</button>
+          <span class="hint" id="set-tgt-msg"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>日志与诊断 <span class="hint">最常缺的依赖会在这里报出来</span></h3>
+        <div id="set-deps" class="hint" style="margin-bottom:8px"></div>
+        <div class="flexline">
+          <select id="set-logsel" style="min-width:200px;width:auto"></select>
+          <input id="set-logn" type="number" value="60" style="width:80px">
+          <button class="ghost mini" id="set-logload">读取日志</button>
+          <button class="ghost mini" id="set-logopen">📂 打开日志目录</button>
+        </div>
+        <div class="log" id="set-log" style="max-height:300px"></div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="side">
+    <div class="stabs">
+      <div class="on" data-st="made">生成的素材</div>
+    </div>
+    <div class="sbody" id="sbody-made">
+      <label>本次及历史产物</label>
+      <div class="flexline" style="margin:2px 0 8px">
+        <button class="ghost mini" id="made-open-out">📂 输出目录</button>
+        <button class="ghost mini" id="made-open-arch">📁 归档目录</button>
+      </div>
+      <div class="gallery" id="made-gallery"></div>
+    </div>
+    <div style="border-top:1px solid var(--line);max-height:46%;display:flex;flex-direction:column">
+      <div class="stabs">
+        <div class="on" data-mt="unet">底模库</div>
+        <div data-mt="lora">LoRA 库</div>
+      </div>
+      <div style="padding:10px"><input id="modelsearch" placeholder="搜索模型名称…"></div>
+      <div class="sbody" id="model-list" style="padding-top:0"></div>
+    </div>
+  </aside>
+</div>
+
+<!-- ================= 优化器：添加第三方大模型 =================
+     OpenAI 兼容协议：填「接口地址 + Key + 模型名」就能接进来，和内置的 Gemini / GLM 平级，
+     保存后优化器分段按钮会多出一项。数据落在 config.json 的 prompt_optimizer.providers。
+     ⚠ Key 只存不回显（后端只给 has_key），所以编辑时留空 = 沿用原来的那份。 -->
+<div id="optmask">
+  <div id="optdlg">
+    <h3>添加第三方大模型 <span class="hint">OpenAI 兼容接口 · 与内置引擎平级</span></h3>
+    <div class="hint" style="margin-bottom:6px">接口地址填 <b>https://xxx/v1</b> 或完整 <b>/chat/completions</b> 都行；本地网关、中转站、云厂商均可。</div>
+    <label>显示名称</label>
+    <input id="opt-name" placeholder="例如：DeepSeek-V3 / 本地 Qwen3">
+    <label>接口地址 API Base URL</label>
+    <input id="opt-url" placeholder="https://api.xxx.com/v1">
+    <label>API Key（可留空；已保存的不回显）</label>
+    <input id="opt-key" placeholder="sk-…" type="password">
+    <div class="optrow">
+      <div><label>模型名</label><input id="opt-model" placeholder="deepseek-chat"></div>
+      <button class="ghost mini" id="opt-fetch">拉取模型列表</button>
+    </div>
+    <select id="opt-modelsel" style="display:none;margin-top:6px"></select>
+    <div class="flexline" style="margin-top:10px">
+      <button class="ghost mini" id="opt-test">测试连接</button>
+      <button class="ghost mini" id="opt-save">保存</button>
+      <button class="ghost mini" id="opt-del" style="display:none">删除该引擎</button>
+      <button class="ghost mini" id="opt-clear">清空</button>
+      <button class="ghost mini" id="opt-close">关闭</button>
+    </div>
+    <div id="optmsg" class="hint"></div>
+    <label>已添加的引擎 <span class="hint">编辑 / 选用</span></label>
+    <div class="optlist" id="opt-list"></div>
+  </div>
+</div>
+
+<!-- ================= 全局任务进度条 =================
+     有任务在跑时才浮现：左「任务名 + 当前阶段」、中「进度条」、右「已用 / 预计剩余」。
+     真步数拿不到时（模型加载、引擎启动阶段）走「计时中」的流动条纹，不假装知道百分比。 -->
+<div id="jobbar">
+  <span class="jbl" id="jbl">任务</span>
+  <span class="jbp" id="jbp">排队中</span>
+  <span class="jbsp"></span>
+  <div id="jtrack"><div id="jfill"></div></div>
+  <span id="jnum">–</span>
+  <span class="jbsp"></span>
+  <span id="jtimes">已用 0.0s</span>
+  <span class="jwarn" id="jwarn"></span>
+  <button class="jx" id="jhide" title="只是把这条进度条藏起来，不会停止生成">藏起来</button>
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let INIT={}, CURPAGE='txt2img', TARGET=null, GROUPS=[], REFKIND='single';
+let OPT_PROV=localStorage.getItem('cs_optprov')||'gemini';
+function setOptProv(v){
+  OPT_PROV=v; try{ localStorage.setItem('cs_optprov',v); }catch(e){}
+  document.querySelectorAll('.seg[data-seg="opt-prov"]').forEach(g=>{
+    g.querySelectorAll('span').forEach(x=>x.classList.toggle('on', x.dataset.v===v));
+  });
+  const st=$('#subtitle'); if(st) st.textContent='优化器：'+optProvName();
+}
+function optProvName(){
+  const ps=((INIT.optimizer||{}).providers)||[];
+  const p=ps.filter(x=>x.id===OPT_PROV)[0];
+  return (p&&p.name)||OPT_PROV;
+}
+function renderOptProvs(){
+  const ps=((INIT.optimizer||{}).providers)||[];
+  if(!ps.length) return;
+  const ids=ps.map(p=>p.id);
+  if(ids.indexOf(OPT_PROV)<0) setOptProv(ids[0]);
+  document.querySelectorAll('.seg[data-seg="opt-prov"]').forEach(g=>{
+    g.innerHTML=ps.map(p=>'<span data-v="'+p.id+'"'+(p.id===OPT_PROV?' class="on"':'')+'>'+p.name+'</span>').join('');
+    g.querySelectorAll('span').forEach(sp=>sp.onclick=()=>setOptProv(sp.dataset.v));
+  });
+}
+
+/* ==================== 优化器：添加第三方大模型（OpenAI 兼容） ====================
+   三个页面（文生图 / 图生图 / H3）的优化器分段按钮右边都有「＋ 添加模型」，共用这一个弹窗。
+   数据流：弹窗表单 → POST /api/optimizer/providers → 后端写 config.json → 返回新列表
+   → 直接重建各页的 opt-prov 分段按钮（不用刷新页面）。
+   ⚠ Key 单向：后端只回 has_key，前端输入框留空表示「不改」，避免保存时被空串洗掉。 */
+let OPTP=[];        // 引擎列表（含 api_url / has_key，不含明文 key）
+let OPTEDIT='';     // 正在编辑的引擎 id，空 = 新增
+const optEsc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function optMsg(t,c){ const e=$('#optmsg'); if(!e) return; e.textContent=t||''; e.style.color=c||'var(--muted)'; }
+async function optLoad(){
+  try{ OPTP=((await (await fetch('/api/optimizer/providers')).json()).providers)||[]; }
+  catch(e){ OPTP=[]; }
+  if(OPTP.length){ INIT.optimizer=INIT.optimizer||{}; INIT.optimizer.providers=OPTP; }
+  optRenderList();
+}
+function optRenderList(){
+  const box=$('#opt-list'); if(!box) return;
+  box.innerHTML=OPTP.map(p=>'<div class="it" data-id="'+optEsc(p.id)+'">'
+      +'<span class="nm">'+optEsc(p.name||p.id)+' <span class="sub">· '+optEsc(p.model)+' · '
+      +optEsc(p.api_url)+(p.has_key?' · 已配 Key':' · 无 Key')+'</span></span>'
+      +'<button class="ghost mini" data-act="edit">编辑</button>'
+      +'<button class="ghost mini" data-act="use">选用</button></div>').join('')
+    ||'<div class="it"><span class="sub">（暂无引擎）</span></div>';
+  box.querySelectorAll('.it[data-id]').forEach(it=>{
+    const id=it.dataset.id;
+    it.querySelector('[data-act="edit"]').onclick=()=>optEdit(id);
+    it.querySelector('[data-act="use"]').onclick=()=>{ setOptProv(id); optMsg('已选用「'+id+'」，各页优化器同步切换。','var(--teal)'); };
+  });
+}
+function optEdit(id){
+  const p=OPTP.filter(x=>x.id===id)[0]; if(!p) return;
+  OPTEDIT=id;
+  $('#opt-name').value=p.name||''; $('#opt-url').value=p.api_url||'';
+  $('#opt-key').value=''; $('#opt-model').value=p.model||'';
+  $('#opt-del').style.display='';
+  optMsg('正在编辑「'+(p.name||id)+'」：Key 留空 = 沿用已保存的那份。');
+}
+function optClear(){
+  OPTEDIT='';
+  ['#opt-name','#opt-url','#opt-key','#opt-model'].forEach(s=>{const e=$(s); if(e)e.value='';});
+  const d=$('#opt-del'), m=$('#opt-modelsel');
+  if(d) d.style.display='none'; if(m) m.style.display='none';
+  optMsg('');
+}
+function optForm(){
+  const v=s=>{const e=$(s); return e?e.value.trim():'';};
+  return {id:OPTEDIT, name:v('#opt-name'), api_url:v('#opt-url'),
+          api_key:v('#opt-key'), model:v('#opt-model')};
+}
+async function optPost(o){
+  return await (await fetch('/api/optimizer/providers',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(o)})).json();
+}
+async function optSave(){
+  const p=optForm();
+  if(!p.api_url||!p.model){ optMsg('接口地址和模型名必填。','var(--red)'); return; }
+  optMsg('保存中…');
+  const r=await optPost({action:'upsert',provider:p});
+  if(!r.ok){ optMsg('保存失败：'+(r.error||''),'var(--red)'); return; }
+  OPTP=r.providers||[];
+  INIT.optimizer=INIT.optimizer||{}; INIT.optimizer.providers=OPTP;
+  renderOptProvs(); optRenderList();
+  const nid=r.id||p.id||((OPTP[OPTP.length-1]||{}).id);
+  if(nid) setOptProv(nid);
+  optClear();
+  optMsg('已保存并选用「'+nid+'」。','var(--teal)');
+  logTo('t2i-log','优化器：已'+(p.id?'更新':'添加')+'引擎 '+nid+'（'+p.model+'）');
+}
+async function optDel(){
+  if(!OPTEDIT) return;
+  if(!confirm('确定删除优化器引擎「'+OPTEDIT+'」？')) return;
+  const r=await optPost({action:'delete',id:OPTEDIT});
+  if(!r.ok){ optMsg('删除失败：'+(r.error||''),'var(--red)'); return; }
+  OPTP=r.providers||[];
+  INIT.optimizer=INIT.optimizer||{}; INIT.optimizer.providers=OPTP;
+  renderOptProvs(); optRenderList(); optClear();
+  optMsg('已删除。','var(--teal)');
+}
+async function optTest(){
+  const p=optForm();
+  if(!p.api_url||!p.model){ optMsg('先填接口地址和模型名，再测。','var(--red)'); return; }
+  optMsg('测试中…（真的会发一条最小请求）');
+  const r=await (await fetch('/api/optimizer/test',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:p})})).json();
+  if(!r.ok){ optMsg('连不上：'+(r.error||''),'var(--red)'); return; }
+  // 思考型模型常把 token 花在 reasoning 上 → content 为空，这不是故障，别报成失败
+  const rp=(r.reply||'').slice(0,40);
+  optMsg('连通 ✓ '+r.model+(rp?(' 回复：“'+rp+'”'):'（无文本回复，思考型模型常见，不影响使用）')
+         +(r.models&&r.models.length?('　该端点有 '+r.models.length+' 个模型可选'):''),'var(--green)');
+}
+async function optFetchModels(){
+  const p=optForm();
+  if(!p.api_url){ optMsg('先填接口地址再拉列表。','var(--red)'); return; }
+  optMsg('拉取中…');
+  const q='/api/optimizer/models?url='+encodeURIComponent(p.api_url)
+        +(p.api_key?('&key='+encodeURIComponent(p.api_key)):'')
+        +(OPTEDIT?('&id='+encodeURIComponent(OPTEDIT)):'');
+  const r=await (await fetch(q)).json();
+  const sel=$('#opt-modelsel'); if(!sel) return;
+  if(!r.ok||!r.models||!r.models.length){
+    optMsg('没拉到：'+(r.error||'该端点没提供 /v1/models')+' —— 手动填模型名即可。','var(--amber)'); return;
+  }
+  sel.innerHTML='';
+  r.models.forEach(m=>{const o=document.createElement('option'); o.textContent=m; o.value=m; sel.appendChild(o);});
+  sel.style.display=''; sel.onchange=()=>{ $('#opt-model').value=sel.value; };
+  optMsg('拉到 '+r.models.length+' 个模型，选一个自动填进模型名。','var(--teal)');
+}
+function optBind(){
+  $$('.opt-add').forEach(b=>b.onclick=()=>{ optLoad(); optClear(); $('#optmask').classList.add('on'); });
+  const on=(id,f)=>{const e=$(id); if(e) e.onclick=f;};
+  on('#opt-close',()=>$('#optmask').classList.remove('on'));
+  on('#opt-clear',optClear);
+  on('#opt-save',optSave);
+  on('#opt-test',optTest);
+  on('#opt-del',optDel);
+  on('#opt-fetch',optFetchModels);
+  const mk=$('#optmask');
+  if(mk) mk.onclick=e=>{ if(e.target===mk) mk.classList.remove('on'); };
+}
+
+/* ==================== 运行日志（左栏「📋 日志」子栏）+ 全局进度条 ====================
+   日志有两个来源，汇进同一个缓冲 GLOG 后统一渲染（左栏是唯一真相）：
+     · 后端 /api/progress 增量拉取（seq 递增）：任务起止、真实采样步、引擎启停、对话耗时
+     · 页面自身的动作（logTo 调用点，40 处）：改参数、暂停、归档、优化器结果等 UI 侧消息
+   分工明确、互不重复：后端只报「它真在做的事」，页面只报「用户点了什么」。 */
+const GLOG={rows:[],bseq:0,lseq:0,filter:'',max:1500,file:'',dir:''};
+const LOG_LBL={task:'任务',prog:'进度',ws:'通道',ui:'界面',engine:'引擎',
+               img:'图像',h3:'视频',chat:'对话',cfg:'配置',app:'应用'};
+let LOGTIMER=null, JOBHIDE=0, LASTPROG=null, LASTSEQ=-1, CURTASK=null;
+
+function logTagOf(id){                    // 页面日志框 id → 后端日志 tag
+  if(id==='h3-log')  return ['h3','视频'];
+  if(id==='i2i-log') return ['img','图生图'];
+  if(id==='t2i-log') return ['img','文生图'];
+  if(id==='eng-log') return ['engine','引擎'];
+  return ['ui','界面'];
+}
+
+function logTo(id,m){
+  const e=$('#'+id);
+  if(e){ e.textContent+=m+"\n"; e.scrollTop=e.scrollHeight; }
+  const p=logTagOf(id);
+  glPush({seq:'L'+(++GLOG.lseq),local:true,lvl:'i',tag:p[0],who:p[1],msg:String(m)},[p[0]]);
+}
+function clearLog(id){const e=$('#'+id); if(e) e.textContent="";}
+function toast(m){logTo(CURPAGE==='h3'?'h3-log':(CURPAGE==='img2img'?'i2i-log':'t2i-log'),m)}
+
+function logWow(now){const t=new Date(now||Date.now());
+  return ('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+':'+('0'+t.getSeconds()).slice(-2);}
+
+function glVisible(r){ return GLOG.filter? (r.tags||[]).indexOf(GLOG.filter)>=0 : true; }
+function glRowHtml(r){
+  const cls=(r.lvl==='e')?'le':((r.lvl==='w')?'lw':((r.lvl==='k')?'lm':''));
+  return '<span class="lt">'+(r.ts||'')+'</span> '
+       + '<span class="ltag">['+(r.who||LOG_LBL[r.tag]||r.tag)+']</span>'
+       + '<span class="'+(cls||'')+'">'+esc(r.msg)+'</span>';
+}
+function glPush(row,tags){
+  row.tags=tags||[row.tag];
+  if(!row.ts) row.ts=logWow();
+  GLOG.rows.push(row);
+  if(GLOG.rows.length>GLOG.max) GLOG.rows.splice(0,GLOG.rows.length-GLOG.max);
+  glAppend(row);
+  const nb=$('#npn-log');
+  if(nb&&!($('#npane')&&!$('#npane').classList.contains('collapsed')
+           &&$('#npane').dataset.tab==='log')){
+    const un=GLOG.rows.filter(r=>r.unread&&glVisible(r)).length;
+    nb.textContent=un?(' ·'+un):'';
+  }else if(nb){ nb.textContent=''; row.unread=false; }
+}
+function glSeen(){ GLOG.rows.forEach(r=>r.unread=false);
+  const nb=$('#npn-log'); if(nb) nb.textContent=''; }
+
+function glAppend(r){
+  const box=$('#np-log-body'); if(!box) return;
+  const stick=box.scrollHeight-box.scrollTop-box.clientHeight<48;
+  const d=document.createElement('div');
+  d.className='lrow'+(glVisible(r)?'':' hid');
+  d.dataset.tags=(r.tags||[]).join(',');
+  d.innerHTML=glRowHtml(r);
+  box.appendChild(d);
+  while(box.childElementCount>GLOG.max+60) box.removeChild(box.firstChild);
+  if(stick) box.scrollTop=box.scrollHeight;
+}
+function renderLog(){
+  const box=$('#np-log-body'); if(!box) return;
+  if(!GLOG.rows.length){
+    box.innerHTML='<div class="sempty">还没有日志。生成一张图 / 发一条消息，这里就会实时出现。</div>';
+    return;
+  }
+  box.innerHTML=GLOG.rows.map(r=>'<div class="lrow'+(glVisible(r)?'':' hid')
+    +'" data-tags="'+(r.tags||[]).join(',')+'">'+glRowHtml(r)+'</div>').join('');
+  box.scrollTop=box.scrollHeight;
+}
+function logText(){
+  return GLOG.rows.filter(glVisible).map(r=>
+    (r.ts||'')+' ['+((r.lvl||'i').toUpperCase())+']['+(r.who||LOG_LBL[r.tag]||r.tag)+'] '+r.msg
+  ).join("\n");
+}
+
+/* ---------- 拉后端：一个请求同时拿「进度快照 + 新增日志行」 ---------- */
+async function pollProgress(){
+  if(document.hidden) return;
+  try{
+    const r=await fetch('/api/progress?since='+GLOG.bseq+'&_='+Date.now(),{cache:'no-store'});
+    if(!r.ok) return;
+    const j=await r.json();
+    if(!j||!j.ok) return;
+    if(j.logfile) GLOG.file=j.logfile;
+    if(j.logdir) GLOG.dir=j.logdir;
+    const rows=j.rows||[];
+    for(let i=0;i<rows.length;i++){
+      const row=rows[i];
+      if(typeof row.seq==='number'&&row.seq>GLOG.bseq) GLOG.bseq=row.seq;
+      glPush({seq:row.seq,lvl:row.lvl,tag:row.tag,who:LOG_LBL[row.tag]||row.tag,
+              ts:row.ts,msg:row.msg},[row.tag]);
+    }
+    applyProg(j.progress);
+  }catch(e){ /* 后端瞬时不可用时静默，等下一轮 */ }
+}
+function startLogPoll(){ if(LOGTIMER) return; LOGTIMER=setInterval(pollProgress,800); pollProgress(); }
+
+/* ---------------------------- 全局进度条 ---------------------------- */
+function fmtDur(s){
+  if(s==null||isNaN(s)) return '–';
+  s=Math.max(0,Number(s));
+  if(s<60) return (s<10?s.toFixed(1):s.toFixed(1))+'s';
+  return Math.floor(s/60)+'m'+('0'+Math.round(s%60)).slice(-2)+'s';
+}
+function applyProg(p){
+  if(!p) return;
+  const bar=$('#jobbar'); if(!bar) return;
+  LASTPROG=p;
+  if(p.seq!==LASTSEQ){ LASTSEQ=p.seq; JOBHIDE=0; if(applyProg._t){clearTimeout(applyProg._t);applyProg._t=null;} }
+  CURTASK=p;
+
+  if(!p.active){
+    if(!p.last||JOBHIDE>Date.now()) { return; }
+    bar.className='on '+(p.last.ok?'done':'fail');
+    $('#jbl').textContent=p.last.label||'任务';
+    $('#jbp').textContent=p.last.ok?'完成':'失败';
+    $('#jnum').textContent='—';
+    $('#jfill').style.width='100%';
+    $('#jwarn').textContent='';
+    $('#jtimes').textContent='用时 '+fmtDur(p.last.secs)+(p.last.note?(' · '+p.last.note):'');
+    document.body.classList.add('jobbusy');
+    if(!applyProg._t){
+      applyProg._t=setTimeout(()=>{ applyProg._t=null; JOBHIDE=Date.now()+60000;
+        const b=$('#jobbar'); if(b) b.className='';
+        document.body.classList.remove('jobbusy'); }, 6000);
+    }
+    return;
+  }
+  if(JOBHIDE>Date.now()) return;                    // 用户手动「藏起来」了
+  if(applyProg._t){ clearTimeout(applyProg._t); applyProg._t=null; }
+  let pct=null, numTxt='–';
+  if(p.max>0){ pct=Math.min(100,p.step/p.max*100); numTxt=p.step+'/'+p.max+' 步'; }
+  else if(p.ntotal>0){ pct=Math.min(100,p.ndone/p.ntotal*100); numTxt=p.ndone+'/'+p.ntotal+' 节点'; }
+  let cls='on'+((pct==null)?' indet':'');
+  if(/失败|中断/.test(p.phase||'')) cls+=' fail';
+  bar.className=cls;
+  if(pct!=null) $('#jfill').style.width=pct.toFixed(1)+'%';
+  $('#jbl').textContent=p.label||'任务';
+  $('#jbp').textContent=p.phase||'执行中';
+  $('#jnum').textContent=numTxt;
+  let t='已用 '+fmtDur(p.elapsed);
+  if(p.eta!=null) t+=' · 预计剩余 '+fmtDur(p.eta);
+  else t+=' · 剩余 估算中…';
+  $('#jtimes').textContent=t;
+  $('#jwarn').textContent=(p.ws==='err')?'⚠ 进度通道未连上（只能看计时）':'';
+  document.body.classList.add('jobbusy');
+}
+
+/* ---------------------- 左栏面板：运行日志（底部） ---------------------- */
+function npSet(open){
+  const pane=$('#npane'); if(!pane) return;
+  pane.classList.toggle('collapsed',!open);
+  const f=$('#npfold'); if(f) f.textContent=open?'▾':'▸';
+  if(open){ glSeen(); renderLog(); }
+}
+/* 对话历史子面板：挂在「LLM 对话」下方，点该项展开/收起 */
+function toggleChatHist(force){
+  const p=$('#chat-hist-pane'); if(!p) return;
+  const open=(typeof force==='boolean')?force:!p.classList.contains('open');
+  p.classList.toggle('open',open);
+  if(open && typeof renderSessions==='function') renderSessions();
+}
+if($('#npfold')) $('#npfold').onclick=()=>{
+  const p=$('#npane'); npSet(p.classList.contains('collapsed')); };
+if($('#log-filter')) $('#log-filter').onchange=e=>{ GLOG.filter=e.target.value; renderLog(); };
+if($('#log-clear')) $('#log-clear').onclick=async()=>{
+  if(!confirm('清空左栏日志缓冲？\n（磁盘上的 logs\\ui-*.log 会保留，不会被删）')) return;
+  GLOG.rows=[]; GLOG.lseq=0; GLOG.bseq=0;
+  try{ await fetch('/api/log/clear',{method:'POST'}); }catch(e){}
+  renderLog();
+};
+if($('#log-copy')) $('#log-copy').onclick=()=>{
+  const t=logText();
+  if(!t){ logTo('t2i-log','日志是空的，没东西可复制。'); return; }
+  const done=()=>logTo('t2i-log','已复制 '+GLOG.rows.filter(glVisible).length+' 行日志到剪贴板。');
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(done,()=>legacyCopy(t,done));
+  } else legacyCopy(t,done);
+};
+function legacyCopy(t,cb){
+  try{
+    const ta=document.createElement('textarea');
+    ta.value=t; ta.style.position='fixed'; ta.style.left='-9999px';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    if(cb) cb();
+  }catch(e){ logTo('t2i-log','复制失败：'+e); }
+}
+if($('#log-open')) $('#log-open').onclick=()=>{
+  const t=logText();
+  if(!t){ logTo('t2i-log','日志是空的，没东西可导出。'); return; }
+  const d=new Date(), p=n=>('0'+n).slice(-2);
+  const name='comfy-studio-log-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'
+             +p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+'.txt';
+  try{
+    const blob=new Blob(["\ufeff"+t],{type:'text/plain;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500);
+    logTo('t2i-log','已导出日志到下载目录：'+name+'（'+GLOG.rows.filter(glVisible).length+' 行）'
+      +(GLOG.file?('　后端原始日志：'+GLOG.file):''));
+  }catch(e){ logTo('t2i-log','导出失败：'+e); }
+};
+if($('#log-dir')) $('#log-dir').onclick=()=>{
+  const d=GLOG.dir||(GLOG.file||'').replace(/[\\/][^\\/]+$/,'');
+  if(!d){ logTo('t2i-log','还没拿到日志目录，稍等一轮轮询再看看。'); return; }
+  ebPost('/api/reveal',{path:d}).then(r=>{
+    logTo('t2i-log', (r&&r.ok)?('已在资源管理器打开日志目录：'+d):('打开失败：'+((r&&r.error)||'未知')));
+  }).catch(e=>logTo('t2i-log','打开失败：'+e));
+};
+if($('#jhide')) $('#jhide').onclick=()=>{
+  JOBHIDE=Date.now()+3600000;               // 只藏这条进度条，不打断生成
+  const b=$('#jobbar'); if(b) b.className='';
+  document.body.classList.remove('jobbusy');
+};
+
+document.querySelectorAll('.seg').forEach(sg=>{
+  sg.querySelectorAll('span').forEach(sp=>sp.onclick=()=>{
+    sg.querySelectorAll('span').forEach(x=>x.classList.remove('on'));
+    sp.classList.add('on');
+    const v=sp.dataset.v;
+    if(sg.dataset.seg==='t2i-mode'){ $('#t2i-prompt').style.display=v==='batch'?'none':''; $('#t2i-batch').style.display=v==='batch'?'':'none'; }
+    if(sg.dataset.seg==='h3-mode'){ $('#h3-prompt').style.display=v==='batch'?'none':''; $('#h3-batch').style.display=v==='batch'?'':'none'; }
+    if(sg.dataset.seg==='i2i-refkind'){ REFKIND=v; renderI2I(); }
+    if(sg.dataset.seg==='opt-prov'){ setOptProv(v); }
+  });
+});
+function segVal(name){const e=$(`.seg[data-seg="${name}"] span.on`);return e?e.dataset.v:''}
+
+$$('.nitem').forEach(n=>n.onclick=()=>{
+  if(n.classList.contains('soon')){ alert('「'+n.textContent.trim()+'」暂未接入：需要对应的模型与 ComfyUI 工作流。'); return; }
+  const prev=CURPAGE;
+  $$('.nitem').forEach(x=>x.classList.remove('active')); n.classList.add('active');
+  $$('.page').forEach(p=>p.classList.remove('on'));
+  CURPAGE=n.dataset.page; $('#p-'+CURPAGE).classList.add('on');
+  refreshModels(CURPAGE);
+  if(CURPAGE==='chat'){ if(prev==='chat') toggleChatHist(); else toggleChatHist(true); }  // 点 LLM 对话 → 展开/收起历史
+});
+$$('.stabs div').forEach(t=>t.onclick=()=>{
+  const g=t.closest('.stabs'); g.querySelectorAll('div').forEach(x=>x.classList.remove('on')); t.classList.add('on');
+  if(t.dataset.st==='tpl'){ sbodyShow('tpl'); } else if(t.dataset.st==='made'){ sbodyShow('made'); loadGallery(); }
+  if(t.dataset.mt){ MLB=t.dataset.mt; renderModelList(); }
+});
+function sbodyShow(w){ const t=$('#sbody-tpl'); if(t) t.style.display=w==='tpl'?'':'none';
+  const m=$('#sbody-made'); if(m) m.style.display=w==='made'?'':'none'; }   // 标签库已删，sbody-tpl 不存在了，这里做空安全
+
+document.addEventListener('focusin',e=>{ if(e.target.classList && e.target.classList.contains('promptbox')) TARGET=e.target; });
+function insertAtCursor(txt){ if(!TARGET) return; const p=TARGET.selectionStart||TARGET.value.length;
+  TARGET.value=TARGET.value.slice(0,p)+txt+TARGET.value.slice(p); TARGET.focus();
+  TARGET.selectionStart=TARGET.selectionEnd=p+txt.length; }
+
+/* ---------- 顶部资源条 ---------- */
+async function refreshStatus(){
+  try{const d=await (await fetch('/api/status')).json();
+    $('#cdot').className='dot '+(d.comfy_online?'ok':'bad');
+    $('#ctxt').textContent=d.comfy_online?'ComfyUI 在线':'ComfyUI 未运行';
+    $('#vram').textContent=d.devices&&d.devices[0]?(d.devices[0].vram_free_gb+' / '+d.devices[0].vram_total_gb+' GB'):'–';
+    const h=$('#h3-state');
+    if(h){ h.textContent=d.h3_online?'在线（共用 ComfyUI 8188）':'未启动（点顶部「H3 视频」或「ComfyUI 绘图」按钮启动）';
+      h.style.color=d.h3_online?'var(--green)':'var(--amber)'; }
+  }catch(e){ $('#cdot').className='dot bad'; $('#ctxt').textContent='ComfyUI 检测失败'; }
+}
+async function refreshSys(){
+  try{const d=await (await fetch('/api/sys')).json();
+    $('#cpu').textContent=d.cpu_percent!=null?d.cpu_percent+'%':'–';
+    $('#ram').textContent=d.ram_used_gb!=null?(d.ram_used_gb+' / '+d.ram_total_gb+' GB'):'–';
+    $('#disk').textContent=d.disk_free_gb!=null?(d.disk_free_gb+' GB 空闲'):'–';
+  }catch(e){}
+}
+
+/* ---------- 初始化 ---------- */
+async function boot(){
+  INIT=await (await fetch('/api/init')).json();
+  $('#t2i-neg').value=INIT.negative_default||''; $('#i2i-neg').value=INIT.negative_default||'';
+  const d=INIT.defaults||{};
+  const set=(id,v)=>{const e=$('#'+id); if(e&&v!=null)e.value=v;};
+  const a=d.txt2img||{}, b=d.img2img||{}, c=d.h3||{};
+  set('t2i-steps',a.steps);set('t2i-cfg',a.cfg);set('t2i-batchsize',a.batch_size);set('t2i-w',a.width);set('t2i-h',a.height);set('t2i-seed',a.seed);
+  set('i2i-steps',b.steps);set('i2i-cfg',b.cfg);set('i2i-batchsize',b.batch_size);set('i2i-longest',b.longest_edge);set('i2i-seed',b.seed);set('i2i-denoise',b.denoise);
+  set('h3-steps',c.steps);set('h3-seed',c.seed);set('h3-dur',c.duration);set('h3-fps',c.fps);
+  set('h3-s1w',c.stage1_w);set('h3-s1h',c.stage1_h);set('h3-s2w',c.stage2_w);set('h3-s2h',c.stage2_h);
+  $('#h3-vas').value=c.vas_enabled===false?'0':'1';
+
+  const t=INIT.h3_templates||{items:[]};
+  $('#h3-guide').innerHTML=(t.items||[]).map(i=>`<option value="${i.path||''}">${i.name_zh||i.name}</option>`).join('')
+    || '<option value="">（未找到模板目录）</option>';
+
+  renderI2I(); renderH3();
+  try{GROUPS=JSON.parse(localStorage.getItem('cs_groups')||'[]')}catch(e){GROUPS=[]}
+  renderGroups();
+  refreshModels('txt2img'); refreshStatus(); refreshSys();
+  renderOptProvs(); optBind(); optLoad();
+  setInterval(refreshStatus,8000); setInterval(refreshSys,3000); loadGallery();
+  $('#subtitle').textContent='优化器：'+optProvName();
+}
+
+/* ---------- 模型库 ---------- */
+let MLB='unet';
+function curModels(mode){ const m=(INIT.models||{})[mode]||{}; return MLB==='unet'?(m.unets||[]):(m.loras||[]); }
+async function refreshModels(mode){
+  const m=(INIT.models||{})[mode]||{};
+  const sel=$('#'+(mode==='txt2img'?'t2i':(mode==='img2img'?'i2i':'h3'))+'-unet');
+  if(sel) sel.innerHTML=(m.unets||[]).map(u=>`<option value="${u.name}" data-path="${u.path}">${u.name} — ${u.arch||''} · ${u.meta||''}</option>`).join('')||'<option value="">(无可用底模)</option>';
+  const lc=$('#'+(mode==='txt2img'?'t2i':(mode==='img2img'?'i2i':'h3'))+'-loras');
+  if(lc) lc.innerHTML=(m.loras||[]).map(l=>`<span class="chip" data-name="${l.name}">＋ ${l.name}</span>`).join('')||'<span class="hint">该模式无可用 LoRA</span>';
+  if(lc) lc.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    if(c.dataset.bad==='1'){ logTo(LORA_MODES[CURPAGE]+'-log','⚠ '+c.dataset.name+'：'+(c.title||'与当前底模不兼容，已跳过')); return; }
+    c.classList.toggle('on'); c.style.borderColor=c.classList.contains('on')?'var(--teal)':''; c.style.color=c.classList.contains('on')?'var(--teal)':''; });
+  if(sel){ const upd=()=>{const o=sel.options[sel.selectedIndex]; const p=$('#'+(mode==='txt2img'?'t2i':(mode==='img2img'?'i2i':'h3'))+'-unet-path'); if(p&&o)p.textContent=o.dataset.path||''; refreshLoraCompat(mode); syncGroupActive(mode);}; sel.onchange=upd; upd(); }
+  renderModelList();
+  renderModelGroups(mode);
+}
+/* ---------- 模型组：点一下 = 切底模 + 切参数，LoRA 区跟着只显示适配的 ----------
+   注意：页面里已有一个 renderGroups()（H3「已保存的素材组」），函数声明会提升、
+   后者覆盖前者 —— 所以这里必须用不同名字，否则静默不生效（踩过）。 */
+function renderModelGroups(mode){
+  const pfx=LORA_MODES[mode]; const host=$('#mg-'+pfx); if(!host) return;
+  const gs=(INIT.groups||[]).filter(g=>(g.pages||[]).includes(mode));
+  if(!gs.length){ host.innerHTML='<span class="hint">该模式暂无预设组</span>'; return; }
+  host.innerHTML=gs.map(g=>`<div class="gpill" data-id="${g.id}" data-unet="${g.unet||''}" title="${g.note||''}">
+      ${g.name}<span class="gs">${(g.arch||'')}</span></div>`).join('');
+  host.querySelectorAll('.gpill').forEach(p=>p.onclick=()=>applyGroup(mode,p.dataset.id));
+  let cur=host.parentElement.querySelector('.gcur');
+  if(!cur){ cur=document.createElement('p'); cur.className='hint gcur'; host.insertAdjacentElement('afterend',cur); }
+  cur.style.color='var(--amber)';
+  syncGroupActive(mode);
+}
+function syncGroupActive(mode){
+  const pfx=LORA_MODES[mode]; const host=$('#mg-'+pfx); if(!host) return;
+  const sel=$('#'+pfx+'-unet'); const cur=sel?sel.value:'';
+  let hit=false;
+  host.querySelectorAll('.gpill').forEach(p=>{
+    const on=(p.dataset.unet===cur); p.classList.toggle('on',on); if(on) hit=true;
+  });
+  const t=host.parentElement.querySelector('.gcur');
+  if(t) t.textContent = hit ? '' : (cur?('当前底模 '+cur+' 不在任何预设组里（手动选择）'):'');
+}
+function applyGroup(mode,gid){
+  const pfx=LORA_MODES[mode];
+  const g=(INIT.groups||[]).find(x=>x.id===gid); if(!g) return;
+  const sel=$('#'+pfx+'-unet');
+  if(sel && g.unet){
+    if(sel.value!==g.unet) sel.value=g.unet;
+    const o=sel.options[sel.selectedIndex]; const pp=$('#'+(pfx==='t2i'?'t2i':(pfx==='i2i'?'i2i':'h3'))+'-unet-path');
+    if(pp&&o) pp.textContent=o.dataset.path||'';
+  }
+  const d=g.defaults||{};
+  if(mode!=='h3'){
+    const set=(id,v)=>{const e=$('#'+id); if(e&&v!=null)e.value=v;};
+    set(pfx+'-steps',d.steps); set(pfx+'-cfg',d.cfg); set(pfx+'-w',d.width); set(pfx+'-h',d.height);
+  }
+  logTo(pfx+'-log','已切到「'+g.name+'」→ 底模 '+(g.unet||'')+(g.note?('   （'+g.note+'）'):''));
+  syncGroupActive(mode);
+  refreshLoraCompat(mode);
+}
+/* LoRA ↔ 当前底模 兼容性自检：不适配的默认隐藏（可展开查看），避免"选了但完全不生效" */
+const LORA_MODES={txt2img:'t2i',img2img:'i2i',h3:'h3'};
+const SHOW_BAD={t2i:false,i2i:false,h3:false};
+async function refreshLoraCompat(mode){
+  const pfx=LORA_MODES[mode]; const sel=$('#'+pfx+'-unet'), lc=$('#'+pfx+'-loras');
+  if(!sel||!lc) return;
+  let hint=lc.parentElement.querySelector('.lora-hint');
+  if(!hint){ hint=document.createElement('p'); hint.className='hint lora-hint'; lc.parentElement.appendChild(hint); }
+  const unet=sel.value||''; if(!unet){ hint.textContent=''; return; }
+  try{
+    const d=await (await fetch('/api/lora/check?unet='+encodeURIComponent(unet))).json();
+    const map={}; (d.reports||[]).forEach(r=>map[r.name]=r);
+    let okN=0,badN=0;
+    lc.querySelectorAll('.chip').forEach(c=>{
+      const r=map[c.dataset.name]; if(!r) return;
+      c.classList.remove('bad','ok'); c.dataset.bad=''; c.style.display='';
+      if(r.ok){ okN++; c.classList.add('ok');
+        c.title='适配：'+r.shape_ok+'/'+r.total+' 层形状吻合（训练于 '+(r.trained_for||'?')+'）'; }
+      else{ badN++; c.classList.add('bad'); c.classList.remove('on');
+        c.style.borderColor=''; c.style.color='';
+        c.title=r.reason; c.dataset.bad='1';
+        if(!SHOW_BAD[mode]) c.style.display='none'; }
+    });
+    hint.innerHTML='';
+    const sp=document.createElement('span');
+    sp.textContent = okN ? (okN+' 个 LoRA 适配当前底模' + (badN?('；另有 '+badN+' 个不适配已隐藏'):''))
+                         : ('当前底模没有适配的 LoRA' + (badN?('（'+badN+' 个不适配）'):'（LoRA 库为空）'));
+    sp.style.color = okN ? 'inherit' : 'var(--amber)';
+    hint.appendChild(sp);
+    if(badN){
+      const a=document.createElement('a');
+      a.textContent = SHOW_BAD[mode] ? '  隐藏不适配的' : '  显示不适配的';
+      a.style.cssText='margin-left:4px;cursor:pointer;color:var(--teal);text-decoration:underline';
+      a.onclick=()=>{ SHOW_BAD[mode]=!SHOW_BAD[mode]; refreshLoraCompat(mode); };
+      hint.appendChild(a);
+    }
+  }catch(e){}
+}
+function fmtBadge(n){const l=(n||'').toLowerCase();
+  if(l.endsWith('.gguf')){const m=(n||'').match(/[Qq]\d[_A-Za-z0-9]*/);return 'GGUF'+(m?' '+m[0].toUpperCase():'');}
+  if(l.endsWith('.safetensors'))return 'safetensors';
+  if(l.endsWith('.ckpt'))return 'ckpt';
+  return '';}
+function renderModelList(){
+  const q=($('#modelsearch').value||'').toLowerCase();
+  const list=curModels(CURPAGE).filter(m=>!q||(m.name||'').toLowerCase().includes(q)||(m.arch||'').toLowerCase().includes(q));
+  $('#model-list').innerHTML=list.map(m=>`<div class="modelcard"><div class="nm">${m.name}</div>
+    <div class="mt"><span class="badge">${m.arch||'未分类'}</span><span class="badge">${fmtBadge(m.name)}</span>${m.meta||''}</div></div>`).join('')||'<p class="hint">无匹配模型</p>';
+}
+$('#modelsearch').oninput=renderModelList;
+
+  /* ---------- 标签库已按需求移除（2026-09-24）：按钮 / 侧栏「模板」页 / buildTags 一并删掉 ---------- */
+
+/* ---------- 参考图/素材槽 ---------- */
+function slotHTML(kind,i,url,name){ return `<div class="slot" data-kind="${kind}" data-i="${i}" ${url?`data-url="${url}"`:''} ${name?`data-name="${name}"`:''}>
+  ${url?(kind==='video'?`<video src="${url}" muted></video>`:`<img src="${url}">`):''}
+  <span class="tag">${kind==='img'?'P':'#'}${i+1}</span>
+  ${url?`<span class="x">✕</span><span class="ref">引用</span>`:''}</div>`; }
+function renderSlots(hostId,kind,n){
+  const host=$('#'+hostId); const old=[...host.querySelectorAll('.slot')].map(s=>({url:s.dataset.url,name:s.dataset.name}));
+  host.innerHTML=''; for(let i=0;i<n;i++){ const o=old[i]||{}; host.insertAdjacentHTML('beforeend',slotHTML(kind,i,o.url,o.name)); }
+  host.querySelectorAll('.slot').forEach(s=>{
+    const i=+s.dataset.i;
+    s.onclick=e=>{
+      if(e.target.classList.contains('x')){ s.remove(); host.insertAdjacentHTML('beforeend',slotHTML(kind,i)); renderSlots(hostId,kind,n); return; }
+      if(e.target.classList.contains('ref')){ const lbl={img:'<Picture',audio:'<Audio',video:'<Video'}[kind]; insertAtCursor(lbl+' '+(i+1)+'> '); return; }
+      if(!s.dataset.url) $(hostId==='h3-imgs'?'#h3-imgfile':(hostId==='h3-audios'?'#h3-audiofile':'#h3-videofile')).click();
+    };
+  });
+}
+function renderI2I(){ renderSlots('i2i-slots','img',REFKIND==='multi'?6:1); }
+function renderH3(){ renderSlots('h3-imgs','img',9); renderSlots('h3-audios','audio',3); renderSlots('h3-videos','video',3); }
+
+async function uploadTo(hostId,kind,files){
+  const host=$('#'+hostId); let idx=0;
+  for(const f of files){
+    const b64=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result.split(',')[1]);fr.readAsDataURL(f)});
+    // engine 字段已去掉：H3 现在跟文生图共用同一个 ComfyUI（8188），
+    // 上传目标不再分家，后端默认就打 COMFY_URL。
+    const j=await (await fetch('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:f.name,data:b64})})).json();
+    const slots=host.querySelectorAll('.slot');
+    let target=null; for(const s of slots){ if(!s.dataset.url){ target=s; break; } }
+    if(!target) continue;
+    const url=URL.createObjectURL(f);
+    target.dataset.url=url; target.dataset.name=j.name||f.name;
+    const i=+target.dataset.i;
+    target.innerHTML=`${kind==='video'?`<video src="${url}" muted></video>`:`<img src="${url}">`}<span class="tag">${kind==='img'?'P':'#'}${i+1}</span><span class="x">✕</span><span class="ref">引用</span>`;
+    bindSlot(host,hostId,kind); idx++;
+  }
+}
+function bindSlot(host,hostId,kind){
+  const n=host.querySelectorAll('.slot').length;
+  host.querySelectorAll('.slot').forEach(s=>{
+    const i=+s.dataset.i;
+    s.onclick=e=>{
+      if(e.target.classList.contains('x')){ s.remove(); host.insertAdjacentHTML('beforeend',slotHTML(kind,i)); bindSlot(host,hostId,kind); return; }
+      if(e.target.classList.contains('ref')){ const lbl={img:'<Picture',audio:'<Audio',video:'<Video'}[kind]; insertAtCursor(lbl+' '+(i+1)+'> '); return; }
+      if(!s.dataset.url) $(hostId==='h3-imgs'?'#h3-imgfile':(hostId==='h3-audios'?'#h3-audiofile':'#h3-videofile')).click();
+    };
+  });
+}
+function slotNames(hostId){ return [...$('#'+hostId).querySelectorAll('.slot')].filter(s=>s.dataset.name).map(s=>s.dataset.name); }
+
+/* ---------- 生成 ---------- */
+function selectedLoras(mode){
+  const lc=$('#'+(mode==='txt2img'?'t2i':(mode==='img2img'?'i2i':'h3'))+'-loras');
+  if(!lc) return [];
+  return [...lc.querySelectorAll('.chip.on')].map(c=>({name:c.dataset.name,weight:1.0}));
+}
+/* ---------- 暂停生成 + 打开成品文件夹 ---------- */
+let CANCELED=false;
+const STOPBTN={txt2img:'#t2i-stop',img2img:'#i2i-stop',h3:'#h3-stop'};
+const LOGID={txt2img:'t2i-log',img2img:'i2i-log',h3:'h3-log'};
+const BARID={txt2img:'t2i-pathbar',img2img:'i2i-pathbar',h3:'h3-pathbar'};
+function setStop(mode,on,text){
+  const b=$(STOPBTN[mode]); if(!b) return;
+  b.disabled=!on; if(text!=null) b.textContent=text;
+}
+function curLog(mode){ return LOGID[mode]||LOGID[CURPAGE]||'t2i-log'; }
+async function doCancel(mode){
+  const lid=curLog(mode); CANCELED=true;
+  logTo(lid,'⏹ 已请求暂停，正在中断引擎…');
+  try{
+    const r=await fetch('/api/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});
+    const j=await r.json();
+    (j.steps||[]).forEach(s=>logTo(lid,'  '+s));
+    logTo(lid, j.canceled?'引擎已中断当前任务。':'（当前没有正在运行的任务）');
+  }catch(e){ logTo(lid,'暂停请求失败: '+e); }
+}
+async function revealPath(path,select,mode){
+  const lid=curLog(mode);
+  if(!path){ logTo(lid,'没有可打开的路径。'); return; }
+  try{
+    const r=await fetch('/api/reveal',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({path,select:!!select})});
+    const j=await r.json();
+    if(j.ok) logTo(lid,'📂 已打开：'+j.path+(j.note?'（'+j.note+'）':''));
+    else logTo(lid,'打开失败: '+(j.error||''));
+  }catch(e){ logTo(lid,'打开失败: '+e); }
+}
+async function revealKind(kind,module,mode){
+  const lid=curLog(mode);
+  try{
+    const r=await fetch('/api/reveal',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({kind,module:module||''})});
+    const j=await r.json();
+    if(j.ok) logTo(lid,'📂 已打开：'+j.path+(j.note?'（'+j.note+'）':''));
+    else logTo(lid,'打开失败: '+(j.error||'未配置该目录'));
+  }catch(e){ logTo(lid,'打开失败: '+e); }
+}
+let PATHS={};
+function outDirOf(mode){
+  return (mode==='h3') ? (PATHS.h3_out_dir||PATHS.output_dir||'') : (PATHS.output_dir||'');
+}
+function renderPathBar(mode,info){
+  const bar=document.getElementById(BARID[mode]); if(!bar) return;
+  const files=((info&&info.files)||[]).filter(Boolean);
+  const arch=((info&&info.archived)||[]).filter(Boolean);
+  const primary=files[0]||arch[0]||'';
+  const dir=primary?primary.replace(/[\\/][^\\/]*$/,''):'';
+  const outDir=dir||outDirOf(mode);
+  const adir=arch.length?arch[0].replace(/[\\/][^\\/]*$/,''):'';
+  bar.style.display='block';
+  bar.innerHTML='<div class="plabel">📁 '+(primary?'成品位置':'成品将输出到')+
+    (files.length>1?'（本次 '+files.length+' 个文件，全部在同目录）':'')+'</div>'+
+    '<div class="ppath">'+(primary||outDir||'（未取到输出目录）')+'</div>'+
+    (adir&&adir!==dir?'<div class="ppath" style="color:var(--muted)">归档副本：'+adir+'（'+arch.length+' 个）</div>':'');
+  const row=document.createElement('div'); row.className='pbtns';
+  const add=(txt,fn,tip)=>{ const b=document.createElement('button'); b.className='ghost mini';
+    b.textContent=txt; if(tip) b.title=tip; b.onclick=fn; row.appendChild(b); };
+  if(primary) add('📂 打开所在文件夹',()=>revealPath(primary,true,mode),'打开资源管理器并选中该文件');
+  add('📂 打开输出目录',()=>revealPath(outDir,false,mode),outDir);
+  add('📁 归档目录',()=>revealKind('archive',mode,mode),'归档根目录/<模块>/<底模>/<日期>/');
+  if(mode==='h3') add('📂 ComfyUI 原始输出',()=>revealKind('h3','',mode),'ComfyUI（8188）的 output 目录 —— H3 与文生图共用');
+  bar.appendChild(row);
+}
+async function bootPathBars(){
+  try{ PATHS=await (await fetch('/api/paths')).json(); }catch(e){ PATHS={}; }
+  ['txt2img','img2img','h3'].forEach(m=>renderPathBar(m,{}));
+}
+['txt2img','img2img','h3'].forEach(m=>{
+  const b=$(STOPBTN[m]);
+  if(b) b.onclick=()=>{ b.disabled=true; doCancel(m); };
+});
+
+async function runGenerate(mode,body,logId,btn){
+  // 图生图前置拦截：没放参考图就别空跑，直接提示（避免底层报晦涩的 Invalid image file）
+  if(mode==='img2img'){
+    const refs=body.refs||[];
+    if(!refs.length){ toast('图生图需要先添加参考图：点「添加图片」上传 1~2 张图，再点生成。'); logTo(logId,'⚠ 已拦截：图生图缺少参考图，请先在图槽添加图片'); return null; }
+  }
+  btn.disabled=true; const t=btn.textContent; btn.innerHTML='<span class="spin"></span>生成中'; clearLog(logId);
+  setStop(mode,true,'⏹ 暂停生成');
+  let j=null;
+  try{
+    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    j=await r.json();
+    (j.log||[]).forEach(l=>logTo(logId,'  '+l));
+    if(j.archived&&j.archived.length) logTo(logId,'  归档: '+j.archived.length+' 个文件');
+    if(j.ok){
+      logTo(logId,'完成 '+j.elapsed+'s');
+      const first=(j.images||[])[0];
+      if(first){ pushHist(mode, body, first.url, first.path); logTo(logId,'📁 成品: '+first.path); }
+      else logTo(logId,'（无新图：ComfyUI 输入哈希缓存命中，换 seed 或改任一参数即可）');
+    } else if(j.cancelled){ CANCELED=true; logTo(logId,'⏹ 已暂停生成（本次未产出成品）'); }
+    else logTo(logId,'失败: '+(j.error||JSON.stringify(j.detail||j)));
+    renderPathBar(mode,{files:((j&&j.images)||[]).map(x=>x.path),archived:(j&&j.archived)||[]});
+  }catch(e){ logTo(logId,'请求失败: '+e); }
+  setStop(mode,false);
+  btn.disabled=false; btn.textContent=t;
+  return j;
+}
+function baseBody(mode){
+  const p=mode==='txt2img'?'t2i':'i2i', pm=$('#'+p+'-prompt').value, unetSel=$('#'+p+'-unet');
+  const b={mode,unet_name:unetSel?unetSel.value:'',loras:selectedLoras(mode)};
+  if(mode==='txt2img'){ b.steps=+$('#t2i-steps').value; b.cfg=+$('#t2i-cfg').value; b.seed=+$('#t2i-seed').value; b.resolution=+$('#t2i-w').value; }
+  else { b.steps=+$('#i2i-steps').value; b.cfg=+$('#i2i-cfg').value; b.seed=+$('#i2i-seed').value; b.denoise=+$('#i2i-denoise').value;
+         b.refs=slotNames('i2i-slots'); b.negative=$('#i2i-neg').value; }
+  return b;
+}
+$('#t2i-run').onclick=async()=>{
+  CANCELED=false;
+  const batch=segVal('t2i-mode')==='batch';
+  const prompts=batch?$('#t2i-batch').value.split('\n').map(s=>s.trim()).filter(Boolean):[$('#t2i-prompt').value];
+  if(batch) logTo('t2i-log','批量模式：'+prompts.length+' 条（点「暂停生成」可随时中断剩余）');
+  for(let i=0;i<prompts.length;i++){
+    if(CANCELED){ logTo('t2i-log','⏹ 已暂停，剩余 '+(prompts.length-i)+' 张未执行'); break; }
+    const b=baseBody('txt2img'); b.prompt=prompts[i];
+    await runGenerate('txt2img',b,'t2i-log',$('#t2i-run'));
+  }
+};
+$('#i2i-run').onclick=async()=>{ CANCELED=false; const b=baseBody('img2img'); b.prompt=$('#i2i-prompt').value; await runGenerate('img2img',b,'i2i-log',$('#i2i-run')); };
+$('#t2i-rnd').onclick=()=>$('#t2i-seed').value=Math.floor(Math.random()*1e9);
+$('#i2i-rnd').onclick=()=>$('#i2i-seed').value=Math.floor(Math.random()*1e9);
+
+/* ---------- H3 ---------- */
+$('#h3-assemble').onclick=()=>{
+  const g=id=>($('#'+id).value||'').trim(); let o='';
+  if(g('h3-subject')) o+='subject_definitions:\n'+g('h3-subject')+'\n\n';
+  if(g('h3-summary')) o+='summary:\n'+g('h3-summary')+'\n\n';
+  if(g('h3-retention')) o+='retention_analysis:\n'+g('h3-retention')+'\n\n';
+  if(g('h3-detail')) o+='detailed_description:\n'+g('h3-detail')+'\n\n';
+  if(g('h3-sound')) o+='overall_soundscape:\n'+g('h3-sound')+'\n\n';
+  if(g('h3-music')) o+='non_diegetic_music:\n'+g('h3-music')+'\n\n';
+  $('#h3-prompt').value=o.trim();
+};
+$('#h3-optimize').onclick=async()=>{
+  const btn=$('#h3-optimize'); btn.disabled=true; const t=btn.textContent; btn.innerHTML='<span class="spin"></span>优化中';
+  logTo('h3-log','调用优化器 '+optProvName()+'（模板：'+($('#h3-guide').selectedOptions[0]||{}).text+'）…');
+  try{
+    const r=await fetch('/api/optimize',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt:$('#h3-prompt').value,guide:$('#h3-guide').value,refs:slotNames('h3-imgs'),mode:'h3',provider:OPT_PROV})});
+    const j=await r.json();
+    if(j.ok){ $('#h3-prompt').value=j.prompt; logTo('h3-log','完成（'+(j.provider_name||'')+' / '+(j.model||'')+'）');
+      if(j.fell_back) logTo('h3-log','  ⚠ 所选引擎不可用，已自动改用其它可用引擎'); }
+    else logTo('h3-log','失败: '+j.error);
+  }catch(e){ logTo('h3-log','请求失败: '+e); }
+  btn.disabled=false; btn.textContent=t;
+};
+$('#h3-savegroup').onclick=()=>{
+  GROUPS.unshift({name:'素材组 '+new Date().toLocaleString(),prompt:$('#h3-prompt').value,
+    imgs:slotNames('h3-imgs'),audios:slotNames('h3-audios'),videos:slotNames('h3-videos')});
+  localStorage.setItem('cs_groups',JSON.stringify(GROUPS)); renderGroups();
+};
+$('#h3-cleargroups').onclick=()=>{ if(confirm('清空所有素材组？')){ GROUPS=[]; localStorage.setItem('cs_groups','[]'); renderGroups(); } };
+function renderGroups(){
+  $('#h3-groups').innerHTML=GROUPS.map((g,i)=>`<div class="modelcard" data-g="${i}">
+    <div class="nm">${g.name}</div><div class="mt">图 ${g.imgs.length} · 音 ${g.audios.length} · 视频 ${g.videos.length}</div></div>`).join('')
+    ||'<p class="hint">暂无素材组</p>';
+  $('#h3-groups').querySelectorAll('.modelcard').forEach(c=>c.onclick=()=>{
+    const g=GROUPS[+c.dataset.g]; $('#h3-prompt').value=g.prompt||'';
+    ['h3-imgs','h3-audios','h3-videos'].forEach((h,k)=>{ const kind=['img','audio','video'][k];
+      $(h).innerHTML=''; (g[['imgs','audios','videos'][k]]||[]).forEach((nm,i)=>{ $(h).insertAdjacentHTML('beforeend',slotHTML(kind,i,'',nm)); });
+      $(h).querySelectorAll('.slot').forEach(s=>{ if(!s.innerHTML.includes('img')&&!s.innerHTML.includes('video')) s.innerHTML+=`<div class="mt hint" style="padding:4px">${s.dataset.name||''}</div>`; });
+      bindSlot($(h),h,kind); });
+    logTo('h3-log','已回落到素材组：'+g.name);
+  });
+}
+async function runH3(){
+  const btn=$('#h3-run'); btn.disabled=true; const t=btn.textContent; btn.innerHTML='<span class="spin"></span>提交中';
+  CANCELED=false; setStop('h3',true,'⏹ 暂停生成');
+  const b={prompt:$('#h3-prompt').value,h3mode:$('#h3-genmode').value,steps:+$('#h3-steps').value,seed:+$('#h3-seed').value,
+    duration:+$('#h3-dur').value,fps:+$('#h3-fps').value,refs:slotNames('h3-imgs'),audios:slotNames('h3-audios'),videos:slotNames('h3-videos'),
+    stage1_w:+$('#h3-s1w').value,stage1_h:+$('#h3-s1h').value,stage2_w:+$('#h3-s2w').value,stage2_h:+$('#h3-s2h').value,
+    vas: $('#h3-vas').value==='1', unet_name:$('#h3-unet').value, loras:selectedLoras('h3')};
+  logTo('h3-log','提交 H3 任务…');
+  try{ const r=await fetch('/api/h3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+    const j=await r.json();
+    if(j.ok){
+      logTo('h3-log','完成 '+j.elapsed+'s | 状态 '+j.status);
+      if(j.info) logTo('h3-log','参数: '+JSON.stringify(j.info));
+      const first=(j.videos||[])[0];
+      if(first){ pushHist('h3', b, first.url, first.path); logTo('h3-log','📁 成品: '+first.path); }
+      (j.videos||[]).forEach(v=>logTo('h3-log','视频: '+v.url));
+      if(j.archived&&j.archived.length) logTo('h3-log','归档: '+j.archived.length+' 个文件');
+    } else if(j.cancelled){
+      CANCELED=true; logTo('h3-log','⏹ 已暂停生成（未产出视频）');
+    } else {
+      logTo('h3-log','失败: '+(j.error||JSON.stringify(j)));
+      if(j.detail) logTo('h3-log',String(j.detail).slice(0,1500));
+    }
+    renderPathBar('h3',{files:(j&&j.files)||[],archived:(j&&j.archived)||[]});
+  }catch(e){ logTo('h3-log','请求失败: '+e); }
+  setStop('h3',false);
+  btn.disabled=false; btn.textContent=t;
+}
+$('#h3-run').onclick=runH3;
+
+$('#i2i-add').onclick=()=>$('#i2i-file').click();
+$('#i2i-folder').onclick=()=>$('#i2i-folderinput').click();
+$('#i2i-clear').onclick=()=>{ $('#i2i-slots').innerHTML=''; renderI2I(); };
+$('#i2i-file').onchange=e=>{ uploadTo('i2i-slots','img',e.target.files); e.target.value=''; };
+$('#i2i-folderinput').onchange=e=>{ uploadTo('i2i-slots','img',e.target.files); e.target.value=''; };
+
+/* ---------- 图生图「批量处理文件夹」 ---------- */
+// 动态建一个 webkitdirectory 输入，专门给批量生成用，不跟上方「导入图槽」冲突
+let _batchInput=null;
+function getBatchInput(){
+  if(_batchInput) return _batchInput;
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*'; inp.multiple=true;
+  inp.setAttribute('webkitdirectory',''); inp.setAttribute('directory','');
+  inp.style.display='none'; document.body.appendChild(inp);
+  inp.onchange=onBatchFolder;
+  _batchInput=inp; return inp;
+}
+$('#i2i-batch').onclick=()=>{ const i=getBatchInput(); i.value=''; i.click(); };
+
+async function onBatchFolder(e){
+  const files=[...e.target.files].filter(f=>/\.(png|jpe?g|webp|bmp|gif|avif)$/i.test(f.name));
+  e.target.value='';
+  if(!files.length){ toast('这个文件夹里没有图片文件（png/jpg/webp/bmp/gif/avif）。'); return; }
+  const prompt=$('#i2i-prompt').value.trim();
+  if(!prompt){ toast('请先在上方写好提示词，再批量处理。'); return; }
+  if(CANCELED) CANCELED=false;
+  const slotRefs=slotNames('i2i-slots');           // 图槽里的图（可选，作为 image_2）
+  const batchBtn=$('#i2i-batch'), runBtn=$('#i2i-run');
+  batchBtn.disabled=true; runBtn.disabled=true;
+  setStop('img2img',true,'⏹ 暂停生成');
+  const bar=$('#i2i-batchbar'); bar.style.display='block';
+  bar.innerHTML='<div class="plabel">📁 批量开始</div><div class="ppath">'+files.length+' 张图 · image_2='+(slotRefs.length?slotRefs[0]:'无（纯提示词自编辑）')+'</div>';
+  logTo('i2i-log','📁 批量开始：'+files.length+' 张，提示词共用，image_2='+(slotRefs.length?slotRefs[0]:'（空图槽→自编辑）'));
+  let done=0, ok=0;
+  for(let i=0;i<files.length;i++){
+    if(CANCELED){ logTo('i2i-log','⏹ 已暂停，剩余 '+(files.length-i)+' 张未处理'); break; }
+    const f=files[i];
+    bar.innerHTML='<div class="plabel">进度 '+(i+1)+' / '+files.length+'</div><div class="ppath">'+f.name+'（上传中…）</div>';
+    // 1) 上传这张文件夹图到 ComfyUI input
+    let fn=null;
+    try{
+      const b64=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result.split(',')[1]);fr.readAsDataURL(f)});
+      const up=await (await fetch('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:f.name,data:b64})})).json();
+      fn=up.name||f.name;
+    }catch(err){ logTo('i2i-log','  ⚠ '+f.name+' 上传失败: '+err); done++; continue; }
+    // 2) 组装 refs：image_1=文件夹图；image_2=图槽图（空则自编辑用同图）
+    const refs = slotRefs.length ? [fn, slotRefs[0]] : [fn, fn];
+    const b=baseBody('img2img'); b.prompt=prompt; b.refs=refs;
+    bar.innerHTML='<div class="plabel">进度 '+(i+1)+' / '+files.length+'</div><div class="ppath">'+f.name+'（生成中…）</div>';
+    const j=await runGenerate('img2img',b,'i2i-log',runBtn);
+    if(j&&j.ok) ok++; done++;
+  }
+  bar.innerHTML='<div class="plabel">✅ 批量完成</div><div class="ppath">成功 '+ok+' / 共 '+files.length+' 张</div>';
+  logTo('i2i-log','批量完成：成功 '+ok+' / 共 '+files.length+' 张'+(CANCELED?'（曾被暂停）':''));
+  setStop('img2img',false);
+  batchBtn.disabled=false; runBtn.disabled=false;
+}
+
+$('#h3-imgfile').onchange=e=>{ uploadTo('h3-imgs','img',e.target.files); e.target.value=''; };
+$('#h3-audiofile').onchange=e=>{ uploadTo('h3-audios','audio',e.target.files); e.target.value=''; };
+$('#h3-videofile').onchange=e=>{ uploadTo('h3-videos','video',e.target.files); e.target.value=''; };
+/* ---------- AI 文本能力（共用 Gemini 3.8 flash 端点） ---------- */
+async function aiTask(mode,prompt,refs){
+  const r=await fetch('/api/optimize',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({mode,prompt,refs:refs||[],provider:OPT_PROV})});
+  return await r.json();
+}
+function splitPN(txt){
+  const m=txt.match(/PROMPT\s*:\s*([\s\S]*?)(?:\n\s*NEGATIVE\s*:|$)/i);
+  const n=txt.match(/NEGATIVE\s*:\s*([\s\S]*)/i);
+  return {p:(m?m[1]:txt).trim(), n:n?n[1].trim():null};
+}
+async function structBtn(btn,promptSel,negSel,logId,refsFn){
+  const t=btn.textContent; btn.disabled=true; btn.innerHTML='<span class="spin"></span>AI 处理中'; clearLog(logId);
+  logTo(logId,'调用 '+optProvName()+' 做结构化描述…');
+  try{
+    const j=await aiTask('image',$(promptSel).value,refsFn?refsFn():[]);
+    if(j.ok){ const s=splitPN(j.prompt); $(promptSel).value=s.p; if(s.n&&negSel) $(negSel).value=s.n;
+      logTo(logId,'完成（'+(j.provider_name||'')+' / '+(j.model||'')+'）');
+      if(j.fell_back) logTo(logId,'  ⚠ 所选引擎不可用，已自动改用其它可用引擎'); }
+    else logTo(logId,'失败: '+j.error);
+  }catch(e){ logTo(logId,'请求失败: '+e); }
+  btn.disabled=false; btn.textContent=t;
+}
+const onStruct=(id,p,n,log,refsFn)=>{const b=$(id); if(b) b.onclick=()=>structBtn(b,p,n,log,refsFn);};
+onStruct('#t2i-struct','#t2i-prompt','#t2i-neg','t2i-log',null);
+onStruct('#i2i-struct','#i2i-prompt','#i2i-neg','i2i-log',()=>slotNames('i2i-slots'));
+
+/* 图片反推描述：选图 → 上传 → AI 读图出提示词 → 填入对应页面的描述框 */
+function runInterrogate(promptSel,logId){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange=async ()=>{
+    const f=inp.files[0]; if(!f) return;
+    const b64=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result.split(',')[1]);fr.readAsDataURL(f)});
+    const up=await (await fetch('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:f.name,data:b64})})).json();
+    if(!up.name){ alert('上传失败'); return; }
+    logTo(logId,'反推描述：AI 正在读图…');
+    try{
+      const j=await aiTask('interrogate','',[up.name]);
+      if(j.ok){
+        const ta=$(promptSel); if(ta) ta.value=j.prompt;
+        logTo(logId,'已把反推结果填入描述框');
+      } else logTo(logId,'反推失败: '+j.error);
+    }catch(e){ logTo(logId,'反推请求失败: '+e); }
+  };
+  inp.click();
+}
+if($('#t2i-interrogate')) $('#t2i-interrogate').onclick=()=>runInterrogate('#t2i-prompt','t2i-log');
+if($('#i2i-interrogate')) $('#i2i-interrogate').onclick=()=>runInterrogate('#i2i-prompt','i2i-log');
+/* ---------- 模型导入（底模 / LoRA 各自独立） ---------- */
+let IMPORT_KIND='unets', META={};
+function closeModal(){ const m=document.getElementById('cs-modal'); if(m) m.style.display='none'; }
+function modal(html){
+  let m=document.getElementById('cs-modal');
+  if(!m){ m=document.createElement('div'); m.id='cs-modal'; document.body.appendChild(m); }
+  m.innerHTML='<div class="mbox">'+html+'</div>'; m.style.display='block'; return m;
+}
+async function reloadModels(){
+  try{ INIT=await (await fetch('/api/init')).json(); refreshModels(CURPAGE); }catch(e){}
+}
+async function openImport(kind){
+  IMPORT_KIND=kind;
+  if(!META.arch_options){ try{ META=await (await fetch('/api/models/meta')).json(); }catch(e){ META={arch_options:[]}; } }
+  const label=(kind==='unets')?'底模':'LoRA';
+  const dst=(META.dirs_ok||{})[kind]||'未找到（将只登记原路径）';
+  modal(
+    '<h3 style="margin:0 0 10px;color:var(--teal)">导入'+label+'</h3>'+
+    '<label>方式 A：粘贴本地文件路径（推荐，大文件秒完成——会硬链接进 ComfyUI 模型目录，零占用）</label>'+
+    '<input id="imp-path" placeholder="X:\\你的模型目录\\...\\xxx.safetensors">'+
+    '<label>方式 B：或在此选择文件上传（会把内容写入模型目录，适合小 LoRA）</label>'+
+    '<input id="imp-file" type="file">'+
+    '<label>模型类别 arch</label>'+
+    '<select id="imp-arch">'+(META.arch_options||[]).map(a=>'<option>'+a+'</option>').join('')+'</select>'+
+    '<p class="hint">写入目录：'+dst+'</p>'+
+    '<div class="flexline" style="margin-top:12px">'+
+      '<button id="imp-ok">确定导入</button>'+
+      '<button class="ghost" id="imp-cancel">取消</button>'+
+    '</div>'+
+    '<div class="log" id="imp-log" style="display:none"></div>'
+  );
+  document.getElementById('imp-cancel').onclick=closeModal;
+  document.getElementById('imp-ok').onclick=async ()=>{
+    const b=document.getElementById('imp-ok'); b.disabled=true; const t=b.textContent; b.innerHTML='<span class="spin"></span>导入中';
+    const lg=document.getElementById('imp-log'); lg.style.display='block'; lg.textContent='';
+    const p=document.getElementById('imp-path').value.trim();
+    const f=document.getElementById('imp-file').files[0];
+    const arch=document.getElementById('imp-arch').value;
+    const body={kind:IMPORT_KIND,arch};
+    try{
+      if(!p && f){ body.filename=f.name;
+        body.data=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result.split(',')[1]);fr.readAsDataURL(f)}); }
+      else if(p){ body.path=p; }
+      else { lg.textContent='请填写路径或选择文件'; b.disabled=false; b.textContent=t; return; }
+      const j=await (await fetch('/api/models/import',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)})).json();
+      (j.steps||[]).forEach(s=>lg.textContent+=s+'\n');
+      if(j.ok){ lg.textContent+='已导入：'+((j.entry||{}).name||'')+'\n'; await reloadModels(); }
+      else lg.textContent+='失败：'+(j.error||'');
+    }catch(e){ lg.textContent+='请求失败：'+e; }
+    b.disabled=false; b.textContent=t;
+  };
+}
+document.querySelectorAll('[data-import]').forEach(b=>b.onclick=()=>openImport(b.dataset.import));
+
+async function loadGallery(){
+  try{ const d=await (await fetch('/api/gallery')).json();
+    $('#made-gallery').dataset.server=(d.images||[]).map(i=>/(\.mp4|\.webm)$/i.test(i.url)
+      ?`<video src="${i.url}" muted></video>`:`<img src="${i.url}" loading="lazy">`).join('');
+  }catch(e){}
+  renderHist();
+}
+
+/* ---------- 可折叠参数组 + 参数说明 ---------- */
+document.querySelectorAll('.card > h3').forEach(h=>{
+  h.insertAdjacentHTML('beforeend','<span class="caret">▼</span>');
+  h.onclick=e=>{ h.parentElement.classList.toggle('collapsed'); };
+});
+const TIPS={
+ '步数':'采样步数。Qwen-Image 2.1 蒸馏版 8 步即可；越高越慢、细节略好。',
+ 'CFG':'提示词遵循强度。Qwen-Image / H3 推荐 1.0；低于 1 容易糊。',
+ '张数':'一次并行出几张图，会多占显存。',
+ '宽':'输出宽度，建议 32 的倍数。',
+ '高':'输出高度，建议 32 的倍数。',
+ '种子（-1=随机）':'固定种子可复现结果；-1 每次随机。',
+ '重绘幅度 Denoise':'图生图改动幅度：0.3 微调 / 0.75 中等 / 1.0 大改。',
+ '最长边':'参考图按最长边等比缩放，防止超显存。',
+ '时长（秒）':'H3 按 17k+5 帧网格向上取整；1 秒 ≈ 24 帧。',
+ '帧率 FPS':'H3 原生 24fps。',
+ 'SAGE / VSA 加速':'注意力加速，开启更快、更省显存。',
+ '采样步数':'H3 建议 8~10（配 8 步加速 LoRA 用 8）。',
+ '生成模式 mode':'reference=带参考图（Ref2VA）；image=纯文生视频（T2VA）。',
+ '提示词模板':'模板只决定写词风格；输出固定六段式。点「AI 优化提示词」时注入。',
+ '扫种子张数（网格对比）':'用同一提示词跑 N 个随机种子，结果并排对比。',
+};
+document.querySelectorAll('label').forEach(l=>{
+  const t=TIPS[l.textContent.trim()];
+  if(t){ l.title=t; l.insertAdjacentHTML('beforeend','<span class="q">?</span>'); }
+});
+
+/* ---------- 历史记录（含参数回填） ---------- */
+function getHist(){ try{ return JSON.parse(localStorage.getItem('cs_hist')||'[]'); }catch(e){ return []; } }
+function pushHist(mode,params,url,path){
+  if(!url) return;
+  const h=getHist(); h.unshift({mode,params,url,path:path||'',ts:Date.now()});
+  try{ localStorage.setItem('cs_hist', JSON.stringify(h.slice(0,30))); }catch(e){}
+  renderHist();
+}
+function goPage(pg){
+  document.querySelectorAll('.nitem').forEach(n=>n.classList.remove('active'));
+  const it=document.querySelector('.nitem[data-page="'+pg+'"]'); if(it) it.classList.add('active');
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('on'));
+  const p=document.getElementById('p-'+pg); if(p) p.classList.add('on');
+  CURPAGE=pg; refreshModels(pg);
+}
+function fillParams(x){
+  const p=x.params||{}, sv=(sel,v)=>{ const e=document.querySelector(sel); if(e&&v!=null) e.value=v; };
+  if(x.mode==='txt2img'){ goPage('txt2img'); sv('#t2i-prompt',p.prompt); sv('#t2i-neg',p.negative); sv('#t2i-steps',p.steps);
+    sv('#t2i-cfg',p.cfg); sv('#t2i-seed',p.seed); sv('#t2i-w',p.resolution); sv('#t2i-unet',p.unet_name); }
+  else if(x.mode==='img2img'){ goPage('img2img'); sv('#i2i-prompt',p.prompt); sv('#i2i-neg',p.negative); sv('#i2i-steps',p.steps);
+    sv('#i2i-cfg',p.cfg); sv('#i2i-seed',p.seed); sv('#i2i-denoise',p.denoise); sv('#i2i-unet',p.unet_name); }
+  else { goPage('h3'); sv('#h3-prompt',p.prompt); sv('#h3-steps',p.steps); sv('#h3-seed',p.seed); sv('#h3-dur',p.duration); sv('#h3-fps',p.fps); }
+  const lid=CURPAGE==='h3'?'h3-log':(CURPAGE==='img2img'?'i2i-log':'t2i-log');
+  clearLog(lid); logTo(lid,'已回填历史参数，可直接重新生成。');
+}
+function renderHist(){
+  const h=getHist(), box=document.getElementById('made-gallery');
+  const server=box.dataset.server||'';
+  box.innerHTML=(h.length? h.map((x,i)=>'<div class="hist" data-i="'+i+'">'+
+      (/(\.mp4|\.webm)$/i.test(x.url)?'<video src="'+x.url+'" muted></video>':'<img src="'+x.url+'" loading="lazy">')+
+      '<div class="hi">'+new Date(x.ts).toLocaleString()+' · '+x.mode+'<br>'+String(x.params&&x.params.prompt||'').slice(0,60)+'</div>'+
+      '<div class="hbtns"><button class="ghost mini" data-fill="'+i+'">回填参数</button>'+
+      (x.path?'<button class="ghost mini" data-rvf="'+i+'" title="'+String(x.path).replace(/"/g,'&quot;')+'">📁 文件夹</button>':'')+
+      '</div></div>').join('')
+    : '<p class="hint">暂无本次会话产物</p>') + server;
+  box.querySelectorAll('[data-fill]').forEach(b=>b.onclick=()=>fillParams(h[+b.dataset.fill]));
+  box.querySelectorAll('[data-rvf]').forEach(b=>b.onclick=()=>{ const x=h[+b.dataset.rvf]; revealPath(x.path,true,x.mode); });
+}
+renderHist();
+
+/* ---------- 扫种子（网格对比） ---------- */
+const sweepBtn=document.getElementById('t2i-sweep-run');
+if(sweepBtn) sweepBtn.onclick=async()=>{
+  CANCELED=false;
+  const n=Math.max(1,Math.min(8,+document.getElementById('t2i-sweep').value||4));
+  const grid=document.getElementById('t2i-sweepgrid');
+  grid.innerHTML=''; clearLog('t2i-log'); logTo('t2i-log','扫种子 ×'+n+'（每张约 20 秒，可随时暂停）');
+  let done=0;
+  for(let i=0;i<n;i++){
+    if(CANCELED){ logTo('t2i-log','⏹ 已暂停，剩余 '+(n-i)+' 张未扫'); break; }
+    const b=baseBody('txt2img'); b.prompt=document.getElementById('t2i-prompt').value;
+    b.seed=Math.floor(Math.random()*1e9);
+    logTo('t2i-log','['+(i+1)+'/'+n+'] seed='+b.seed);
+    const j=await runGenerate('txt2img',b,'t2i-log',sweepBtn);
+    if(j&&j.cancelled) break;
+    (j&&j.images||[]).slice(0,1).forEach(im=>grid.insertAdjacentHTML('beforeend','<img src="'+im.url+'">'));
+    if(j&&j.ok) done++;
+  }
+  logTo('t2i-log','扫种子结束 · 实际完成 '+done+'/'+n+' 张');
+};
+
+/* =========================================================================
+   桌面版模块：引擎条 / 显存互斥 / LLM 对话 / 设置
+   ========================================================================= */
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function md(s){
+  let h=esc(s);
+  h=h.replace(/```([\s\S]*?)```/g,(m,c)=>'<pre>'+c.replace(/^\n/,'')+'</pre>');
+  h=h.replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>');
+  return h;
+}
+function fmtGB(x){return x==null?'–':(+x).toFixed(1)+' GB'}
+async function ebGet(p){return (await fetch(p)).json()}
+async function ebPost(p,o){
+  const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o||{})});
+  return r.json();
+}
+// 引擎 id → 显示名。注意 H3 没有独立引擎条目了：它跟 comfy 共用 8188 那个 ComfyUI，
+// 所以这里不能再列 h3（否则「检测运行状态」会去查一个不存在的引擎 id）。
+const ENG_LABEL={comfy:'ComfyUI 绘图（含 H3 视频）',llm:'LLM 文字生成'};
+
+/* ---------------- 弹窗 ---------------- */
+function showModal(title,bodyHtml,extraLabel,extraFn){
+  $('#eb-modal-title').textContent=title;
+  $('#eb-modal-body').innerHTML=bodyHtml;
+  const ex=$('#eb-modal-extra');
+  if(extraLabel){ ex.style.display=''; ex.textContent=extraLabel;
+    ex.onclick=()=>{ hideModal(); if(extraFn) extraFn(); }; }
+  else ex.style.display='none';
+  $('#eb-modal').style.display='block';
+}
+function hideModal(){ $('#eb-modal').style.display='none'; }
+$('#eb-modal-ok').onclick=hideModal;
+$('#eb-modal').onclick=e=>{ if(e.target.id==='eb-modal') hideModal(); };
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') hideModal(); });
+
+/* ---------------- 引擎条 ---------------- */
+let ENG_STATUS={engines:[],gpu:null,exclusive:'all'};
+const EB_BUSY={};
+
+async function refreshEngines(deep){
+  try{
+    ENG_STATUS=await ebGet('/api/engine/status'+(deep?'?deep=1':''));
+    renderEngines(); updateChatEngineUI();
+  }catch(e){ const n=$('#eb-note'); if(n) n.textContent='引擎状态获取失败'; }
+}
+function renderEngines(){
+  const g=ENG_STATUS.gpu;
+  if(g&&g.total){
+    const used=Math.max(0,g.total-g.free);
+    const pct=Math.max(0,Math.min(100,(used/g.total)*100));
+    $('#eb-vram-txt').textContent=used.toFixed(1)+' / '+g.total.toFixed(1)+' GB';
+    const bar=$('#eb-vram-bar');
+    bar.style.width=pct+'%';
+    bar.style.background=pct>88?'var(--red)':(pct>72?'var(--amber)':'var(--teal)');
+  }
+  (ENG_STATUS.engines||[]).forEach(e=>{
+    const btn=$('#eb-'+e.id); if(!btn) return;
+    const dot=btn.querySelector('.dot'), st=$('#st-'+e.id);
+    btn.classList.remove('on','busy','err','ext');
+    const busy=EB_BUSY[e.id];
+    if(busy){ btn.classList.add('busy'); st.textContent=busy==='starting'?'启动中…':'停止中…'; dot.className='dot bad'; return; }
+    if(e.running){
+      btn.classList.add('on');
+      if(e.owner==='external') btn.classList.add('ext');
+      const mm=(e.models&&e.models.length)?(' · '+e.models[0]):'';
+      st.textContent=(e.state==='ready'?'运行中':(e.state==='starting'?'加载中':e.state))+(e.owner==='external'?'(外部)':'')+mm;
+      if(e.models&&e.models[0]) st.title=e.models[0];  // 全名超宽被省略号截断时，悬停可见完整名
+      dot.className='dot ok';
+    }else{
+      st.textContent=e.enabled?'未运行':'已禁用';
+      dot.className='dot bad';
+      if(!e.enabled) btn.classList.add('err');
+    }
+  });
+  const run=(ENG_STATUS.engines||[]).filter(e=>e.running).map(e=>e.name);
+  $('#eb-note').textContent=run.length?('· 运行中：'+run.join(' + ')):'';
+}
+
+async function startEngine(eid,force){
+  if(EB_BUSY[eid]) return false;
+  EB_BUSY[eid]='starting'; renderEngines();
+  let ok=false;
+  try{
+    const r=await ebPost('/api/engine/start',{id:eid,force:!!force});
+    if(!r.ok){
+      if(r.code==='VRAM'){
+        showModal('显存不足','<div style="line-height:1.9">'+esc(r.error)+'</div>'
+          +'<p class="hint">同一时刻只让一个引擎占显存是这个工作台的默认策略。若你确认够用，可点「仍然启动」强制拉起。</p>',
+          '仍然启动',()=>startEngine(eid,true));
+      } else {
+        showModal('启动失败','<div style="line-height:1.9">'+esc(r.error||'未知错误')+'</div>'
+          +(r.code?('<p class="hint">错误码：'+esc(r.code)+'</p>'):''));
+      }
+    } else {
+      ok=true;
+      if(r.stopped&&r.stopped.length){
+        showModal('已自动切换引擎',
+          '为腾出显存给 <b>'+esc(ENG_LABEL[eid]||eid)+'</b>，已自动停止：<b>'
+          +esc(r.stopped.map(x=>ENG_LABEL[x]||x).join('、'))+'</b>。'
+          +'<p class="hint">显存互斥：ComfyUI 与本地 LLM 不能同时驻留。</p>');
+      }
+      if(r.notes&&r.notes.length) $('#eb-note').textContent='· '+r.notes.join('；');
+      pollUntilReady(eid);
+    }
+  }catch(e){ showModal('启动异常','<div class="mono">'+esc(String(e))+'</div>'); }
+  finally{ delete EB_BUSY[eid]; refreshEngines(true); }
+  return ok;
+}
+function pollUntilReady(eid){
+  let n=0;
+  const t=setInterval(async()=>{
+    n++;
+    await refreshEngines(true);
+    const e=(ENG_STATUS.engines||[]).filter(x=>x.id===eid)[0]||{};
+    if(e.state==='ready'||e.state==='error'||n>170){
+      clearInterval(t);
+      if(e.state==='error'&&e.error) showModal('「'+esc(ENG_LABEL[eid]||eid)+'」启动失败',
+        '<div class="mono" style="max-height:300px;overflow:auto">'+esc(e.error)+'</div>');
+    } else if(e.state==='off'&&n>3){
+      // 被互斥踢掉 / 用户手动停了：静默收工，别傻等 5 分钟
+      clearInterval(t);
+    }
+  },2000);
+}
+function waitReady(eid,timeoutSec){
+  return new Promise(res=>{
+    const t0=Date.now();
+    const t=setInterval(async()=>{
+      await refreshEngines(true);
+      const e=(ENG_STATUS.engines||[]).filter(x=>x.id===eid)[0]||{};
+      if(e.state==='ready'){ clearInterval(t); res(true); }
+      else if(e.state==='error'||Date.now()-t0>timeoutSec*1000){ clearInterval(t); res(false); }
+    },2000);
+  });
+}
+async function stopEngine(eid){
+  if(EB_BUSY[eid]) return;
+  EB_BUSY[eid]='stopping'; renderEngines();
+  try{ await ebPost('/api/engine/stop',{id:eid}); }catch(e){}
+  delete EB_BUSY[eid]; await refreshEngines(true);
+}
+
+$$('#enginebar .ebtn[data-eid]').forEach(b=>{
+  b.onclick=()=>{
+    const eid=b.dataset.eid;
+    const e=(ENG_STATUS.engines||[]).filter(x=>x.id===eid)[0]||{};
+    if(e.running) stopEngine(eid); else startEngine(eid);
+  };
+});
+$('#eb-stopall').onclick=async()=>{
+  const run=(ENG_STATUS.engines||[]).filter(e=>e.running);
+  if(!run.length){ showModal('无需操作','当前没有引擎在运行。'); return; }
+  if(!confirm('停止以下引擎？\n'+run.map(e=>'· '+e.name).join('\n'))) return;
+  await ebPost('/api/engine/stop_all',{});
+  await refreshEngines(true);
+};
+$('#eb-quit').onclick=async()=>{
+  const run=(ENG_STATUS.engines||[]).filter(e=>e.running);
+  const msg=run.length
+    ? '将执行：\n· 停止引擎：'+run.map(e=>e.name).join('、')+'\n· 关闭本地后端服务\n\n之后需要重新点「启动Comfy第三方前端」才能再打开。确定吗？'
+    : '将关闭本地后端服务。\n之后需要重新点「启动Comfy第三方前端」才能再打开。确定吗？';
+  if(!confirm(msg)) return;
+  const b=$('#eb-quit'); b.disabled=true; b.textContent='⏻ 正在退出…';
+  try{ await ebPost('/api/app/quit',{}); }catch(e){}
+  document.body.innerHTML='<div style="display:flex;height:100vh;align-items:center;justify-content:center;'
+    +'font:16px/1.8 system-ui;color:#444;text-align:center">'
+    +'<div>Comfy 第三方前端 已退出 ✅<br><span style="font-size:13px;color:#888">'
+    +'引擎已停止、后端服务已关闭。可以关掉这个窗口了。</span></div></div>';
+};
+$('#eb-detect').onclick=async()=>{
+  const btn=$('#eb-detect');
+  btn.disabled=true; const old=btn.textContent; btn.textContent='🔍 检测中…';
+  const rows=[];
+  for(const eid of Object.keys(ENG_LABEL)){
+    try{
+      const r=await ebGet('/api/engine/detect?id='+encodeURIComponent(eid));
+      rows.push(detectCard(r));
+    }catch(e){ rows.push('<p class="hint">'+esc(eid)+' 检测失败：'+esc(String(e))+'</p>'); }
+  }
+  btn.disabled=false; btn.textContent=old;
+  showModal('引擎检测结果',rows.join(''),'打开日志目录',()=>{
+    ebPost('/api/reveal',{path:(ENG_STATUS.log_dir||'')}).catch(()=>{});
+  });
+};
+function detectCard(r){
+  const ok=!!r.ok, col=ok?'var(--green)':'var(--red)';
+  const g=r.vram;
+  return '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px;background:var(--panel2)">'
+   +'<div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px">'
+   +'<span class="dot '+(ok?'ok':'bad')+'"></span>'+esc(r.name||r.id)
+   +'<span class="hint" style="font-weight:400;margin-left:auto">端口 '+(r.port==null?'–':r.port)+'</span></div>'
+   +'<div style="margin-top:7px;font-size:12px;line-height:1.9">'
+   +'<div>判定：<b style="color:'+col+'">'+esc(r.verdict||'')+'</b></div>'
+   +'<div class="hint">exe：'+(r.exe_exists?'存在':'<span style="color:var(--red)">不存在</span>')
+   +' · 工作目录：'+(r.cwd_exists?'存在':'<span style="color:var(--red)">不存在</span>')
+   +' · 端口 PID：'+(r.port_pid||'无')
+   +' · HTTP 探针：'+(r.http_ok?'通':'不通')
+   +' · 归属：'+(r.owner==='app'?'本程序':(r.owner==='external'?'<b>外部启动</b>':'无'))+'</div>'
+   +(g?('<div class="hint">显存 '+g.used+' / '+g.total+' GB（空闲 '+g.free+'）</div>'):'')
+   +(r.loaded?('<div class="hint">已驻留模型：'+esc(r.loaded.id)+' · ctx '+r.loaded.n_ctx+' · 参数 '+Math.round((r.loaded.n_params||0)/1e9*10)/10+'B</div>'):'')
+   +(r.active_model?('<div class="hint" style="word-break:break-all">配置指向：'+esc(r.active_model)+'</div>'):'')
+   +'</div></div>';
+}
+
+/* ---------------- LLM 对话 ---------------- */
+const CHAT={
+  target:localStorage.getItem('cs_chat_target')||'local',
+  model:{}, msgs:[], groups:[], busy:false, ctrl:null,
+  sessions:[], cur:'',                       // 多会话：sessions 是列表，cur 是当前会话 id
+  editing:null,                              // 正在修改「已发出消息」的索引（null = 不是编辑模式）
+  lastPromptTok:null,                        // 上一次请求的真实 prompt_tokens（上下文仪表用它校准估算）
+  params:{temperature:0.7,top_p:0.8,max_tokens:7000,turns:12,system:'',thinking:true}
+};
+function setChatStat(s){ $('#chat-stat').textContent=s||''; }
+function scrollMsgs(){ const m=$('#chat-msgs'); m.scrollTop=m.scrollHeight; }
+
+async function loadChatModels(){
+  try{ const d=await ebGet('/api/chat/models'); CHAT.groups=d.groups||[]; }
+  catch(e){ CHAT.groups=[]; }
+  renderTargetSelect();
+}
+function renderTargetSelect(){
+  const sel=$('#chat-target');
+  const groups=CHAT.groups||[];
+  const pick=id=>(groups.filter(g=>g.id===id)[0])||null;
+  let html='';
+  const lg=pick('local');
+  if(lg){
+    const ms=lg.models||[];
+    html+='<optgroup label="本地 llama.cpp'+(lg.online?'（在线）':'（引擎未启动）')+'">';
+    if(ms.length) ms.forEach(m=>{ html+='<option value="local|'+esc(m.id)+'">'+esc(m.id)+(m.status?(' · '+esc(m.status)):'')+'</option>'; });
+    else html+='<option value="local|'+esc(lg.default_model||'')+'" disabled>'+esc(lg.default_model||'（引擎未启动，可点左侧按钮拉起）')+'</option>';
+    html+='</optgroup>';
+  }
+  const og=pick('ollama');
+  // Ollama 未启动且无模型时整组不渲染 —— 否则会生成 "ollama|" 空值选项，
+  // 被下面的默认选中逻辑选中，界面显示成"（未安装模型）"，看着像坏了。
+  if(og && ((og.models||[]).length || og.online)){
+    const ms=og.models||[];
+    html+='<optgroup label="Ollama 本地'+(og.online?'（在线）':'（未启动）')+'">';
+    if(ms.length) ms.forEach(m=>{ html+='<option value="ollama|'+esc(m.id)+'">'+esc(m.id)+'</option>'; });
+    else html+='<option value="ollama|'+esc(og.default_model||'')+'" disabled>'+esc(og.default_model||'（未安装模型）')+'</option>';
+    html+='</optgroup>';
+  }
+  const cg=pick('cloud');
+  if(cg){
+    const list=cg.detail||cg.models||[];
+    html+='<optgroup label="云端网关">';
+    list.forEach(m=>{
+      const mm=m.model||'';
+      html+='<option value="'+esc(m.id)+'|'+esc(mm)+'">'+esc(m.name||m.id)+(mm?(' · '+esc(mm)):'')+(m.has_key===false?'（无 Key）':'')+'</option>';
+    });
+    html+='</optgroup>';
+  }
+  sel.innerHTML=html||'<option value="">（没有可用的对话目标）</option>';
+  const opts=[...sel.options].filter(o=>!o.disabled&&o.value);
+  const want=CHAT.target+'|'+(CHAT.model[CHAT.target]||'');
+  let hit=opts.filter(o=>o.value===want)[0];
+  if(!hit && CHAT.target){                       // 只有 target 匹配、模型名对不上时，取该组第一项
+    hit=opts.filter(o=>o.value.split('|')[0]===CHAT.target)[0];
+  }
+  if(!hit) hit=opts.filter(o=>o.value.split('|')[0]==='local')[0];  // 优先本地
+  if(!hit) hit=opts[0];
+  if(hit) sel.value=hit.value;
+  syncTargetFromSelect();
+}
+function syncTargetFromSelect(){
+  const v=$('#chat-target').value||'|';
+  const i=v.indexOf('|');
+  if(i<0) return;
+  CHAT.target=v.slice(0,i);
+  CHAT.model[CHAT.target]=v.slice(i+1);
+  try{ localStorage.setItem('cs_chat_target',CHAT.target); }catch(e){}
+  updateChatEngineUI();
+}
+$('#chat-target').onchange=syncTargetFromSelect;
+
+function updateChatEngineUI(){
+  const engs=ENG_STATUS.engines||[];
+  const e=engs.filter(x=>x.id==='llm')[0]||{};
+  if(!engs.length&&!CHAT.groups){        // 引擎状态还没回来，别让标签卡在初始文案上
+    $('#chat-engstate').textContent='正在检测引擎状态…';
+    $('#chat-warn').innerHTML='';
+    return;
+  }
+  const isLocal=CHAT.target==='local';
+  const isOllama=CHAT.target==='ollama';
+  $('#chat-start').style.display=(isLocal&&!e.running)?'':'none';
+  $('#chat-stopeng').style.display=(isLocal&&e.running)?'':'none';
+  const warn=$('#chat-warn');
+  let msg='', st='';
+  const drawRunning=(ENG_STATUS.engines||[]).filter(x=>x.running&&x.id!=='llm');
+  if(isLocal){
+    st=e.running?('本地引擎：'+(e.state==='ready'?'已就绪':'启动中')+((e.models&&e.models[0])?(' · '+e.models[0]):'')):'本地引擎：未运行';
+    if(e.model_missing){
+      // 当前对话模型文件已被移走（如挪到 NAS 机械盘）→ 禁用启动、明确灰态提示
+      $('#chat-start').disabled=true;
+      msg='<b>当前对话模型文件缺失：</b>'+esc(e.active_model||'')+'<br>可能已被移到别处（如 NAS 机械盘）。切到设置页「模型库」里其它存在的模型，或把文件放回 <code>X:\\你的llama.cpp\\models</code> 后再启动。';
+    } else if(!e.running&&drawRunning.length){
+      msg='<b>'+esc(drawRunning.map(x=>x.name).join('、'))+' 正在占着显存。</b>发送消息时会自动停掉它们，再启动本地 LLM（16GB 显存装不下两个）。';
+    } else if(e.running&&drawRunning.length){
+      msg='<b>'+esc(drawRunning.map(x=>x.name).join('、'))+' 与本地 LLM 同时在跑</b>，显存可能不够。建议先停掉绘图引擎。';
+    }
+  } else if(isOllama){
+    const og=(CHAT.groups||[]).filter(g=>g.id==='ollama')[0]||{};
+    st=og.online?'Ollama：已连接':'Ollama：未连接（需先启动 Ollama 服务）';
+    if(!og.online) msg='Ollama 没在监听 11434。在设置页把 ollama 引擎启用并启动，或在系统里手动跑 <code>ollama serve</code>。';
+  } else {
+    st='云端网关：直连，不占用本地显存';
+  }
+  $('#chat-engstate').textContent=st;
+  warn.innerHTML=msg;
+  warn.classList.toggle('show',!!msg);
+  // 思维链开关锁态：新模型（OrcaRouter-GSQ-RCO）强制开思考且不可改；旧模型可手动切换
+  const tt=thinkToggle;
+  if(tt){
+    const locked=!!(e&&e.thinking_locked);
+    tt.classList.toggle('locked',locked);
+    tt.disabled=locked;
+    if(locked){
+      CHAT.params.thinking=true;
+      tt.classList.add('on'); tt.setAttribute('aria-checked','true');
+      tt.title='思维链（思考过程）：当前模型（OrcaRouter-GSQ-RCO 新量化）已锁定开启，不可关闭——官方要求开启以获得预期推理行为。';
+    }else{
+      tt.title='思维链（思考过程）：开＝模型先推理再回答；关＝直接回答。默认开，点一下切换。';
+      if(CHAT.target==='local') setThinking(!!CHAT.params.thinking);
+    }
+  }
+}
+
+/* ---------- 消息元数据：格式化 + 渲染 ---------- */
+function fmtSec(s){ if(s==null||isNaN(s)) return '—'; return (s<10? s.toFixed(2): s.toFixed(1))+'s'; }
+function hhmm(ts){ const d=new Date(ts||Date.now());
+  return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+
+/* 把 stats 渲染成一行「总用时 · 首字 · 输出 · 速度 · 模型」。
+   live=true 时是流式进行中的实时行（颜色更亮、带脉动）。 */
+function mstatHtml(m,live){
+  /* 用户消息也给它一行按钮：发出去发现写错了/想换个问法时，可以改。
+     （原来只有 AI 消息有按钮，用户消息发出去就"焊死"了。） */
+  if(m.role==='user'){
+    return '<div class="mstat">'
+      +'<button class="msbtn" data-edit="'+m.i+'" title="修改这条已发出的消息（改完后这条之后的对话会作废并重发）">✎ 修改这条</button>'
+      +'</div>';
+  }
+  if(m.role!=='assistant') return '';
+  const s=m.stats||{};
+  const bits=[];
+  const sep='<span class="sep">·</span>';
+  const push=(h)=>{ if(bits.length) bits.push(sep); bits.push(h); };
+  if(live){
+    push('<span class="ms">生成中 已用 <b>'+fmtSec(s.total)+'</b></span>');
+    if(s.ttf!=null) push('<span class="ms">首字 <b>'+fmtSec(s.ttf)+'</b></span>');
+    if(s.chars) push('<span class="ms"><b>'+s.chars+'</b> 字</span>');
+    if(s.tps) push('<span class="ms"><b>'+s.tps.toFixed(1)+'</b> 字/s</span>');
+  }else{
+    if(m.err) push('<span class="ms">请求失败</span>');
+    if(s.stopped) push('<span class="ms">已停止</span>');
+    if(s.total!=null) push('<span class="ms">总用时 <b>'+fmtSec(s.total)+'</b></span>');
+    if(s.ttf!=null) push('<span class="ms">首字 <b>'+fmtSec(s.ttf)+'</b></span>');
+    if(s.chars) push('<span class="ms">输出 <b>'+s.chars+'</b> 字</span>');
+    if(s.ctok) push('<span class="ms">tokens <b>'+s.ctok+'</b></span>');
+    if(s.tpsTok) push('<span class="ms"><b>'+s.tpsTok.toFixed(1)+'</b> tok/s</span>');
+    else if(s.tps) push('<span class="ms"><b>'+s.tps.toFixed(1)+'</b> 字/s</span>');
+    if(s.ptok) push('<span class="ms">提示 '+s.ptok+' tok</span>');
+    if(s.cache) push('<span class="ms">缓存命中 '+s.cache+'</span>');
+    if(s.reason) push('<span class="ms">思考 '+s.reason+' 字</span>');
+    if(s.model) push('<span class="ms">'+esc(s.model)+'</span>');
+    if(m.content) push('<button class="msbtn" data-copy="'+m.i+'" title="复制这条回答">复制</button>');
+    if(m.i!=null&&m.i===CHAT.msgs.length-1&&CHAT.msgs[m.i].role==='assistant'
+       &&!m.err) bits.push('<button class="msbtn" data-regen="1" title="重新生成这条回答">重生成</button>');
+  }
+  return '<div class="mstat'+(live?' live':(m.err?' err':''))+'">'+bits.join('')+'</div>';
+}
+
+function renderMsgs(){
+  const box=$('#chat-msgs');
+  if(!CHAT.msgs.length){
+    box.innerHTML='<div class="empty">还没有对话。选好模型后直接在下面输入即可。<br>'
+      +'本地目标会自动拉起 llama.cpp（首次约 15–40 秒，加载 27B 模型）。</div>';
+    return;
+  }
+  box.innerHTML=CHAT.msgs.map((m,i)=>{
+    m.i=i;
+    const role=m.role==='user'?'user':'ai';
+    const think=m.reason?('<details class="think"'+(m.content?'':' open')+'><summary>思考过程 · '
+      +m.reason.length+' 字</summary><div class="tk">'+esc(m.reason)+'</div></details>'):'';
+    const who=m.role==='user'?('你<span class="mt">'+hhmm(m.ts)+'</span>')
+      :('助手<span class="mt">'+hhmm(m.ts)+'</span>');
+    return '<div class="msg '+role+(m.err?' err':'')+'">'
+      +'<div class="av">'+(m.role==='user'?'你':'AI')+'</div>'
+      +'<div class="bd"><div class="who">'+who+'</div>'
+      +think
+      +'<div class="bubble">'+(m.role==='user'?esc(m.content):md(m.content))+'</div>'
+      +mstatHtml(m)+'</div></div>';
+  }).join('');
+  scrollMsgs();
+  attCtxRender();                              // 历史变了（新增/编辑/清空）→ 上下文仪表跟着刷
+}
+/* 「重新生成 / 转绘图」的按钮必须用**事件委托**：renderMsgs 每次都重建 DOM，
+   直接 onclick 绑定会在下一次重绘后全部失效（这是这类列表最常见的失效原因）。 */
+$('#chat-msgs').addEventListener('click',e=>{
+  const ed=e.target.closest('[data-edit]');
+  if(ed){ chatStartEdit(+ed.dataset.edit); return; }
+  const cp=e.target.closest('[data-copy]');
+  if(cp){
+    const m=CHAT.msgs[+cp.dataset.copy];
+    if(m){ copyText(m.content||'',cp); }
+    return;
+  }
+  if(e.target.closest('[data-regen]')) $('#chat-regen').click();
+});
+
+/* ---------- 修改「已发出」的消息 ----------
+   行为跟 ChatGPT 的"编辑消息"一致：改完这条 → 它**之后的对话全部作废**
+   （AI 那条旧回复是基于旧提问生成的，留着会自相矛盾）→ 用新内容重新生成。
+   进入编辑模式只是"把内容倒回输入框"，所以你可以随时取消，不会动历史。 */
+function chatEditUI(on){
+  const send=$('#chat-send'), cancel=$('#chat-edit-cancel'), ta=$('#chat-input');
+  if(send) send.textContent=on?'保存并重发':'发送';
+  if(cancel) cancel.style.display=on?'':'none';
+  const c=$('#chat-composer');
+  if(c) c.classList.toggle('editing',!!on);
+  if(ta) ta.placeholder=on
+    ? '改完点「保存并重发」（Esc 取消）'
+    : 'Enter 发送 · Shift+Enter 换行 · 可直接拖入 txt/md/csv/代码或图片（Ctrl+V 也能粘贴）（本地 27B 互斥：发消息时会自动关掉 ComfyUI）';
+}
+function chatStartEdit(i){
+  const m=CHAT.msgs[i];
+  if(!m||m.role!=='user') return;
+  if(CHAT.busy){ setChatStat('正在生成中，等这一轮结束再改'); return; }
+  if(CHAT.editing!=null){ setChatStat('已经在修改另一条了，先取消或保存'); return; }
+  CHAT.editing=i;
+  const ta=$('#chat-input');
+  ta.value=m.content||'';
+  chatEditUI(true);
+  if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); }
+  const after=CHAT.msgs.length-i-1;
+  setChatStat('✎ 正在修改第 '+(i+1)+' 条：改完点「保存并重发」'
+    +(after?('——这条之后的 '+after+' 条会作废'):''));
+}
+function chatCancelEdit(){
+  if(CHAT.editing==null) return;
+  CHAT.editing=null;
+  const ta=$('#chat-input'); if(ta) ta.value='';
+  chatEditUI(false);
+  setChatStat('');
+}
+/* 只换文字，**保留**这条消息原来带的图片 / 文档附件——那是上一轮就贴进去的内容，
+   不属于"这次要改"的部分。 */
+function chatRebuildRaw(oldRaw,newText){
+  let imgs=[],docs='';
+  if(Object.prototype.toString.call(oldRaw)==='[object Array]'){
+    imgs=oldRaw.filter(p=>p&&p.type==='image_url');
+    docs=oldRaw.filter(p=>p&&p.type==='text'&&/^【附件：/.test(p.text||''))
+         .map(p=>p.text).join('\n\n');
+  }else if(typeof oldRaw==='string'){
+    docs=(oldRaw.match(/【附件：[\s\S]*?【附件结束】/g)||[]).join('\n\n');
+  }
+  let body=newText;
+  if(docs) body+='\n\n'+docs;
+  if(imgs.length) return [{type:'text',text:body}].concat(imgs);
+  return body;
+}
+function copyText(text,btn){
+  const done=()=>{ if(btn){ const t=btn.textContent; btn.textContent='已复制 ✓';
+    setTimeout(()=>{btn.textContent=t;},1200); } };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(()=>fallback());
+  } else fallback();
+  function fallback(){
+    const ta=document.createElement('textarea'); ta.value=text;
+    ta.style.position='fixed'; ta.style.left='-9999px';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); done(); }catch(e){}
+    document.body.removeChild(ta);
+  }
+}
+
+function addStreamNode(){
+  const wrap=document.createElement('div');
+  wrap.className='msg ai';
+  wrap.innerHTML='<div class="av">AI</div><div class="bd"><div class="who">助手'
+    +'<span class="mt">'+hhmm()+'</span></div>'
+    +'<div class="bubble"><span class="cur"></span></div>'
+    +'<div class="mstat live">生成中…</div></div>';
+  $('#chat-msgs').appendChild(wrap);
+  scrollMsgs();
+  return wrap.querySelector('.bubble');
+}
+
+/* ============ 对话附件：拖入 / 粘贴 / 选择文件 ============
+   为什么需要它：对话页原本只有一个 textarea，没有任何接收文件的入口，
+   浏览器默认会忽略拖进来的文件 → 用户侧表现为「拖进去没反应」。
+   模型本身完全能读：后端 /api/chat/stream 把 messages 原样透传给上游，
+   只要文件内容变成文本（或图片的多模态数组）就能被读到。
+   四条设计约束：
+     1) 文本文件 → 读成纯文本，以「附件块」并入用户消息；
+     2) 图片 → 走 OpenAI 多模态 content 数组（llama.cpp 支持 data URL 图片）；
+     3) 展示与发送分离：CHAT.msgs 的 content 恒为纯文本（renderMsgs 直接 esc 它），
+        多模态数组另存 m.raw，只在转发给模型时用 → 否则历史渲染会被数组打崩；
+     4) 编码兜底（UTF-8 出乱码则自动改按 GBK 重解）+ 超限护栏（先估算 token 再提示，
+        绝不静默截断）。
+   另外：同一份文档发过一次后，后续追问走 llama.cpp 前缀缓存，几乎零开销，
+   所以「让它读长文档」是很划算的用法；真正的瓶颈只在第一次的预处理。 */
+CHAT.attach=[];
+const ATT_TEXT_EXT=['txt','md','markdown','json','csv','tsv','log','xml','yaml','yml','ini','cfg','conf',
+  'py','js','ts','jsx','tsx','html','htm','css','scss','less','bat','cmd','ps1','sh','sql','go','java',
+  'cpp','cc','c','h','hpp','cs','php','rb','rs','swift','kt','scala','lua','pl','m','asm','toml',
+  'vue','svelte','astro','env','properties','gitignore','editorconfig','dockerfile','makefile',
+  'rst','tex','srt','vtt','ass','diff','patch','text','me','log1'];
+const ATT_TEXT_MIME=['application/json','application/xml','application/x-yaml','application/javascript',
+  'application/x-sh','application/x-httpd-php','application/x-python','application/sql','application/toml',
+  'application/x-tex','application/x-latex','application/rtf'];
+const ATT_MAX_IMG_MB=12;      // 单图上限
+const ATT_MAX_TXT_MB=30;      // 单文本文件上限（再大浏览器读取会卡死）
+const ATT_IMG_TOK=1000;       // 一张图占用的上下文粗估（vision token）
+
+/* ===== 上下文预算与自动压缩 =====
+   规则（用户定）：**总上下文**（系统提示 + 历史对话 + 本次附件）估算达到
+   「模型最大上下文的一半」时，**自动开始压缩**（主要压附件，因为历史不便有损处理）。
+   压缩是**可回退**的：x.text 永远是原文，x.used 才是实际发送的文本；
+   每次重算都从原文重新压，所以删掉附件 / 历史变短时会自动"解压"回原文。 */
+let ATT_CTX=65536;                     // 最大上下文，尽量从引擎实时读，读不到用这个兜底
+let ATT_MAX_OUT=8192;                  // 单次生成上限（引擎 -n），同样尽量从引擎读
+const ATT_ZIP_KEY='cs_att_autozip';
+let ATT_COMPRESS_ON=(function(){ try{ return localStorage.getItem(ATT_ZIP_KEY)!=='0'; }catch(e){ return true; } })();
+function attLimit(){ return Math.floor(ATT_CTX/2); }   // 触发线 = 最大上下文的一半
+/* 压缩的**目标**比触发线再保守 20%。
+   原因：token 估算对"数字/符号/短标识符密集"的文本会偏低（实测最坏约 1.36 倍——
+   自然英文约 0.22 tok/字符，而 '2026-09-23' 这类接近 0.6）。留出这段余量，
+   保证压缩后的**真实**占用仍然落在模型上限内（真实 ≈ 0.4×ctx×1.36 ≈ 0.55×ctx）。 */
+function attZipTarget(){ return Math.floor(attLimit()*0.8); }
+/* 往输入框里粘贴的文本超过这个量，就自动转成附件——只有附件才会被自动压缩。
+   否则它会以"手打内容"的身份原样发出去，直接撞上下文上限（表现就是 502）。 */
+function attPasteAsAttach(){ return Math.max(2000, Math.floor(attLimit()*0.25)); }
+function attExt(n){ const m=/\.([A-Za-z0-9]+)$/.exec(n||''); return m?m[1].toLowerCase():''; }
+function attIsImg(f){ return /^image\//.test(f.type||'')||['png','jpg','jpeg','webp','gif','bmp'].indexOf(attExt(f.name))>=0; }
+function attIsText(f){
+  const t=f.type||'';
+  return /^text\//.test(t)||ATT_TEXT_MIME.indexOf(t)>=0||ATT_TEXT_EXT.indexOf(attExt(f.name))>=0;
+}
+function attFmt(b){ return b<1024?(b+' B'):b<1048576?((b/1024).toFixed(1)+' KB'):((b/1048576).toFixed(2)+' MB'); }
+/* 粗略估 token：CJK 约 0.75/字，其余约 0.30/字符（刻意偏保守，宁可早提醒） */
+function attTokens(s){
+  const cjk=(s.match(/[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/g)||[]).length;
+  return Math.round(cjk*0.75+(s.length-cjk)*0.30);
+}
+function attRead(f,asText){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>rej(fr.error||new Error('读取失败'));
+    if(!asText){ fr.onload=()=>res(fr.result); fr.readAsDataURL(f); return; }
+    fr.onload=()=>{
+      const buf=fr.result;
+      let t=new TextDecoder('utf-8').decode(buf);
+      const bad=(t.match(/\uFFFD/g)||[]).length;
+      if(bad>Math.max(3,t.length*0.002)){            // 乱码偏多 → 大概率是 GBK 文档
+        try{
+          const g=new TextDecoder('gbk').decode(buf);
+          if((g.match(/\uFFFD/g)||[]).length<bad) t=g;
+        }catch(e){}
+      }
+      res(t);
+    };
+    fr.readAsArrayBuffer(f);
+  });
+}
+/* ---------- 上下文占用统计（系统提示 + 历史 + 附件） ---------- */
+function attMsgTokens(m){
+  const c=(m&&m.raw!==undefined&&m.raw!==null)?m.raw:(m&&m.content);
+  if(typeof c==='string') return attTokens(c);
+  if(Object.prototype.toString.call(c)==='[object Array]'){
+    let n=0;
+    c.forEach(p=>{
+      if(!p) return;
+      if(p.type==='text') n+=attTokens(p.text||'');
+      else if(p.type==='image_url') n+=ATT_IMG_TOK;      // 图片项按常量粗估
+    });
+    return n;
+  }
+  return attTokens(String(c==null?'':c));
+}
+function attHistTokens(){
+  const turns=Math.max(1,+CHAT.params.turns||12);
+  const hist=(CHAT.msgs||[]).filter(m=>!m.err&&(m.role==='user'||m.role==='assistant')).slice(-turns*2);
+  let n=0; hist.forEach(m=>{ n+=attMsgTokens(m); });
+  return {tokens:n,count:hist.length};
+}
+function attDocTokens(){
+  return CHAT.attach.filter(x=>x.kind==='text')
+    .reduce((s,x)=>s+(x.usedTokens===undefined?x.tokens:x.usedTokens),0);
+}
+/* 输入框里现写/粘贴的文字。它**不是附件**，不会被压缩，但同样吃上下文。
+   必须计入统计，否则"直接往输入框粘 10 万字"会绕过所有保护发出去撞上限
+   （上游返回 400 exceed_context_size → 前端只看到 502）。 */
+function attTypedText(){ const el=$('#chat-input'); return el?(el.value||''):''; }
+function attContextStat(){
+  const sys=attTokens(CHAT.params.system||'');
+  const h=attHistTokens();
+  const typed=attTokens(attTypedText());
+  const doc=attDocTokens();
+  const limit=attLimit();
+  const total=sys+h.tokens+typed+doc;
+  return {sys:sys,hist:h.tokens,histCount:h.count,typed:typed,doc:doc,total:total,
+          limit:limit,ctx:ATT_CTX,over:total>limit};
+}
+/* 从引擎读真上下文（notes 里形如 "… / ctx=65536 / 生成上限 8192"）；读不到就用兜底值 */
+async function attLoadCtx(){
+  try{
+    const d=await ebGet('/api/engine/status');
+    const e=((d&&d.engines)||[]).filter(x=>x.id==='llm')[0]||{};
+    const notes=(e.notes||[]).join(' ');
+    let c=Number(e.ctx||0);
+    if(!c){ const m=/ctx=(\d+)/.exec(notes); if(m) c=+m[1]; }
+    if(c>0) ATT_CTX=c;
+    const m2=/生成上限\s*(\d+)/.exec(notes);
+    if(m2) ATT_MAX_OUT=+m2[1];
+  }catch(e){}
+  attAutoCompress();
+  return ATT_CTX;
+}
+
+/* ---------- 三级压缩（从轻到重，能停在前一级就停） ---------- */
+/* 一级 · 无损瘦身：去行尾空白、合并连续空行、折叠连续完全重复的行（日志类效果显著） */
+function attTrim(t){
+  const out=[]; let blank=0,prev=null,rep=0;
+  t.split(/\r?\n/).forEach(ln=>{
+    const s=ln.replace(/[ \t]+$/,'');
+    if(!s.trim()){ if(++blank>1) return; out.push(''); return; }
+    blank=0;
+    if(s===prev){ if(++rep>0) return; }                  // 连续重复行只留 1 行
+    else rep=0;
+    prev=s; out.push(s);
+  });
+  return out.join('\n');
+}
+/* 段落内截断：保开头 62% + 结尾 35%，中间标明省略量 */
+function attClip(p,maxTok){
+  const chars=Math.max(80,Math.floor(maxTok*1.45));
+  if(p.length<=chars) return p;
+  const h=Math.floor(chars*0.62), tl=Math.max(0,chars-h-26);
+  return p.slice(0,h)+'\n…（此处省略 '+(p.length-h-tl).toLocaleString()+' 字）…\n'+p.slice(p.length-tl);
+}
+/* 二级 · 抽取式：按段落打分保留"信息密度高"的段，**保持原顺序、不改写、不编造** */
+function attExtract(t,budget){
+  const paras=t.split(/\n{2,}/).map(s=>s.trim()).filter(Boolean);
+  if(paras.length<3) return attHardCut(t,budget);
+  const scored=paras.map((p,i)=>{
+    let sc=0;
+    if(/^(#{1,6}\s|[-=*]{3,}|第[一二三四五六七八九十百]+[章节条]|\d+[.、)]\s)/.test(p)) sc+=4;  // 标题/条目
+    if(/[:：]\s*$/.test(p.slice(0,60))) sc+=1;
+    if(/\d/.test(p)) sc+=1;                                    // 含数字
+    if(/\d{4}[-/年]\d{1,2}/.test(p)) sc+=2;                    // 含日期
+    if(p.length<300) sc+=1; else if(p.length>2000) sc-=1;      // 超长段落多为噪声
+    if(i===0||i===paras.length-1) sc+=3;                       // 首尾通常最重要
+    return {p:p,i:i,sc:sc,tok:attTokens(p)};
+  });
+  const pick=scored.slice().sort((a,b)=>b.sc-a.sc||a.i-b.i);
+  const keep=[]; let acc=0;
+  for(let i=0;i<pick.length&&acc<budget;i++){
+    const s=pick[i], room=budget-acc;
+    if(s.tok<=room){ keep.push(s); acc+=s.tok; }
+    else if(room>budget*0.25){ const p2=attClip(s.p,room); keep.push({p:p2,i:s.i,sc:s.sc,tok:attTokens(p2)}); acc+=attTokens(p2); }
+  }
+  keep.sort((a,b)=>a.i-b.i);
+  return keep.map(x=>x.p).join('\n\n');
+}
+/* 三级 · 兜底：保头尾硬截断，保证一定能塞进预算 */
+function attHardCut(t,budget){
+  const chars=Math.max(200,Math.floor(budget*1.45));
+  if(t.length<=chars) return t;
+  const h=Math.floor(chars*0.6), tl=Math.floor(chars*0.35);
+  return t.slice(0,h)+'\n\n…（中间省略 '+(t.length-h-tl).toLocaleString()+' 字，已自动压缩）…\n\n'+t.slice(t.length-tl);
+}
+function attCompressOne(text,tok,budget){
+  if(tok<=budget) return {text:text,tokens:tok,mode:'none'};
+  const t1=attTrim(text), k1=attTokens(t1);
+  if(k1<=budget) return {text:t1,tokens:k1,mode:'trim'};
+  const t2=attExtract(t1,budget), k2=attTokens(t2);
+  if(k2<=budget*1.08) return {text:t2,tokens:k2,mode:'extract'};
+  const t3=attHardCut(t1,budget);
+  return {text:t3,tokens:attTokens(t3),mode:'cut'};
+}
+/* 按「系统提示 + 历史 + 附件」的总量决定是否压缩。
+   幂等且可回退：每次都从原文重新压，所以删掉附件或历史变短会自动"解压"回去。 */
+function attAutoCompress(){
+  const docs=CHAT.attach.filter(x=>x.kind==='text');
+  docs.forEach(x=>{ x.used=x.text; x.usedTokens=x.tokens; x.cmode='none'; });     // 复位到原文
+  if(ATT_COMPRESS_ON&&docs.length){
+    const st=attContextStat();
+    if(st.total>st.limit){
+      /* 目标 = 触发线的 80%（不是刚好卡在触发线上），给估算误差留安全垫。
+         附件额度 = 目标 − 固定开销（系统提示+历史），但至少给附件留 20%，
+         否则历史一长就会把附件压成空。 */
+      const target=attZipTarget();
+      const budget=Math.max(Math.floor(target*0.2), target-(st.sys+st.hist));
+      const raw=docs.reduce((s,x)=>s+x.tokens,0)||1;
+      docs.forEach(x=>{
+        const share=Math.max(200,Math.floor(budget*(x.tokens/raw)));
+        const r=attCompressOne(x.text,x.tokens,share);
+        x.used=r.text; x.usedTokens=r.tokens; x.cmode=r.mode;
+      });
+    }
+  }
+  attRender();
+  return attContextStat();
+}
+function attAddTxt(text,name){
+  let bytes=text.length; try{ bytes=new Blob([text]).size; }catch(e){}
+  const tk=attTokens(text);
+  CHAT.attach.push({kind:'text',name:name||('粘贴文本-'+new Date().toTimeString().slice(0,5)+'.txt'),
+    size:bytes,text:text,tokens:tk,used:text,usedTokens:tk,cmode:'none'});
+  attAutoCompress();          // 入列即按当前上下文总量判断是否需要自动压缩
+}
+/* 不支持的格式：**直接不允许添加**，并说清"那该怎么办"（不是含糊的"不认识"） */
+function attRejectMsg(name){
+  const e=attExt(name);
+  const office={doc:'Word 文档',docx:'Word 文档',xls:'Excel 表格',xlsx:'Excel 表格',ppt:'PPT',pptx:'PPT',pdf:'PDF'}[e];
+  if(office){
+    return '不添加「'+name+'」：'+office+'（.'+e+'）不是纯文本，浏览器读不出来。\n\n'
+      +'· Word / PPT → 另存为 txt，或打开后全选复制，直接 Ctrl+V 粘贴进来\n'
+      +'· Excel → 另存为 CSV 再拖\n'
+      +'· PDF → 选中文字复制粘贴（或先转成 txt）';
+  }
+  if(['zip','rar','7z','tar','gz','bz2','xz'].indexOf(e)>=0)
+    return '不添加「'+name+'」：压缩包（.'+e+'）请先解压，再把里面的文本文件拖进来。';
+  if(['mp3','wav','m4a','flac','ogg','aac','opus','mp4','mkv','mov','avi','wmv','flv','webm'].indexOf(e)>=0)
+    return '不添加「'+name+'」：音频/视频（.'+e+'）读不了——只能读纯文本和图片。';
+  if(['exe','dll','msi','sys','bin','so','dylib','iso','img'].indexOf(e)>=0)
+    return '不添加「'+name+'」：可执行/镜像文件（.'+e+'）。';
+  return '不添加「'+name+'」：不支持这种格式（'+(e?('.'+e):'无扩展名')+'）。\n\n'
+    +'能读的两类：\n· 纯文本：txt / md / json / csv / py / js / html / log / xml / yaml / ini / bat / sql …\n'
+    +'· 图片：png / jpg / webp / gif / bmp';
+}
+/* 拖拽悬停阶段拿不到文件名（File 只在 drop 时才可用），只能用 MIME 提前标红明显不支持的类别 */
+function attMimeBad(t){
+  if(!t) return false;                                    // 空 = 未知，不在悬停阶段拦
+  if(/^text\//.test(t)) return false;
+  if(/^image\//.test(t)) return false;                    // 图片支持
+  if(ATT_TEXT_MIME.indexOf(t)>=0) return false;
+  return true;
+}
+
+async function attAdd(files){
+  const list=[].slice.call(files||[]); if(!list.length) return;
+  const rejected=[];
+  for(let i=0;i<list.length;i++){
+    const f=list[i];
+    try{
+      if(attIsImg(f)){
+        if(f.size>ATT_MAX_IMG_MB*1048576){
+          rejected.push('图片太大：'+f.name+'（'+attFmt(f.size)+'，上限 '+ATT_MAX_IMG_MB+' MB）');
+          continue;
+        }
+        CHAT.attach.push({kind:'image',name:f.name,size:f.size,url:await attRead(f,false)});
+      }else if(attIsText(f)){
+        if(f.size>ATT_MAX_TXT_MB*1048576){
+          rejected.push('文本太大：'+f.name+'（'+attFmt(f.size)+'，上限 '+ATT_MAX_TXT_MB+' MB）——请先切成几个文件');
+          continue;
+        }
+        const t=await attRead(f,true);
+        /* 自动压缩关闭时，退回"超限先确认"的老行为，避免闷头发出去报错 */
+        if(!ATT_COMPRESS_ON){
+          const tk=attTokens(t);
+          if(tk>attLimit()&&!confirm('《'+f.name+'》约 '+tk.toLocaleString()+' token，已达触发线 '
+              +attLimit().toLocaleString()+'（最大上下文的一半），但自动压缩当前是**关闭**的。\n\n仍要添加吗？')){
+            continue;
+          }
+        }
+        attAddTxt(t,f.name);
+      }else{
+        rejected.push(attRejectMsg(f.name));               // 格式不支持 → 直接不允许添加
+      }
+    }catch(e){ rejected.push('读取失败：'+f.name+'（'+((e&&e.message)||e)+'）'); }
+  }
+  attRender();
+  if(rejected.length) alert(rejected.join('\n\n————————\n\n'));
+}
+const ATT_MODE_TXT={trim:'去冗余',extract:'抽取压缩',cut:'截断压缩'};
+function attChipMeta(x){
+  if(x.kind==='image') return attFmt(x.size);
+  const z=(x.cmode&&x.cmode!=='none');
+  if(z) return x.tokens.toLocaleString()+' → '+x.usedTokens.toLocaleString()+' tok · 已自动压缩';
+  return x.tokens.toLocaleString()+' tok · '+attFmt(x.size);
+}
+function attRender(){
+  const bar=$('#chat-atch'); if(!bar) return;
+  const a=CHAT.attach;
+  bar.style.display=a.length?'flex':'none';
+  bar.innerHTML=a.map((x,i)=>{
+    const badge=x.kind==='image'?('<img src="'+x.url+'" alt="">'):'<span>📄</span>';
+    const z=(x.kind==='text'&&x.cmode&&x.cmode!=='none');
+    const tip=esc(x.name)+(z?('\n原文 '+x.tokens.toLocaleString()+' token → 已自动压缩至约 '
+      +x.usedTokens.toLocaleString()+' token（'+ATT_MODE_TXT[x.cmode]+'；保留原文顺序，不改写、不编造）\n点 × 移除'):'\n点 × 移除');
+    return '<span class="atch'+(z?' atchzip':'')+'" title="'+tip+'">'+badge
+      +'<span class="an">'+esc(x.name)+'</span><span class="aw">'+attChipMeta(x)+'</span>'
+      +'<span class="ax" data-att="'+i+'" title="移除">×</span></span>';
+  }).join('');
+  attCtxRender();
+}
+/* 上下文仪表：把"系统提示 / 历史 / 附件"三段占用摊开给用户看，
+   超过触发线（最大上下文的一半）时标黄，并说明已自动压缩了几个附件。 */
+function attCtxRender(){
+  const el=$('#chat-ctx'); if(!el) return;
+  const st=attContextStat();
+  /* 常驻显示（用户要求，参考 Claude 的「上下文余量」条）：随时知道还剩多少空间 */
+  el.style.display='flex';
+  const pct=st.ctx?Math.min(100,st.total/st.ctx*100):0;
+  const zipped=CHAT.attach.filter(x=>x.kind==='text'&&x.cmode&&x.cmode!=='none').length;
+  const overCtx=st.total>=st.ctx;
+  const hot=pct>=80;                          // 80% 起转黄，提醒快满了
+  const real=CHAT.lastPromptTok;              // 上次请求的真实占用（最准的参照）
+  el.innerHTML=
+     '<span class="ctxtitle">上下文已用</span>'
+    +'<span class="ctxpct'+(overCtx?' over':(hot?' hot':''))+'">'+pct.toFixed(1)+'%</span>'
+    +'<span class="ctxbar-i'+(overCtx?' over':(hot?' hot':''))+'"><i style="width:'+Math.max(1,Math.min(100,pct))+'%"></i></span>'
+    +'<span class="ctxn'+(st.over?' over':'')+'">'+st.total.toLocaleString()+' / '+st.ctx.toLocaleString()+'</span>'
+    +'<span class="ctxl">系统 '+st.sys.toLocaleString()+' · 历史 '+st.hist.toLocaleString()
+      +(st.typed?(' · 输入框 '+st.typed.toLocaleString()):'')+' · 附件 '+st.doc.toLocaleString()
+      +(real?(' · 上次实际 '+real.toLocaleString()):'')+'</span>'
+    +(zipped?('<span class="ctxzip">⚡ 已自动压缩 '+zipped+' 个附件</span>'):'')
+    +(overCtx?('<span class="ctxwarn">⚠ 已顶到模型上限 '+st.ctx.toLocaleString()+'，压缩附件也救不了——请减少「上下文轮数」或清空历史</span>'):'')
+    +'<span class="ctxsw" data-zipsw="1" title="自动压缩：估算总量达到「最大上下文的一半」（'+st.limit.toLocaleString()+'）时，自动把附件压缩到预算内。点击可开关。">'
+      +(ATT_COMPRESS_ON?'⚙ 自动压缩：开':'⚙ 自动压缩：关')+'</span>';
+}
+function attClear(){ CHAT.attach=[]; attRender(); }
+/* 文本附件 → 并入消息正文的「附件块」。用户自己写的话放在最前面，附件跟在其后。 */
+function attToText(){
+  return CHAT.attach.filter(x=>x.kind==='text').map(x=>{
+    const z=(x.cmode&&x.cmode!=='none');
+    const head='【附件：'+x.name+(z
+      ?('（原文约 '+x.tokens.toLocaleString()+' token，已自动压缩至约 '+x.usedTokens.toLocaleString()
+        +' token，'+ATT_MODE_TXT[x.cmode]+'）')
+      :('（约 '+x.tokens.toLocaleString()+' token）'))+'】';
+    return head+'\n'+(x.used===undefined?x.text:x.used)+'\n【附件结束】';
+  }).join('\n\n');
+}
+/* 存档瘦身：图片 data URL 不进会话存档（否则 chat_sessions.json 会被撑爆），
+   文本附件的 raw 保留（体积小，后续追问还用得上）。 */
+function attSlimMsgs(msgs){
+  return (msgs||[]).map(m=>{
+    if(!m.raw) return m;
+    let raw=m.raw;
+    if(Object.prototype.toString.call(raw)==='[object Array]'&&raw.some(p=>p&&p.type==='image_url')){
+      const txt=raw.filter(p=>p&&p.type==='text').map(p=>p.text).join('\n\n');
+      if(!txt){ const c=Object.assign({},m); delete c.raw; return c; }
+      raw=txt;
+    }
+    if(typeof raw==='string'&&raw.length>300000) raw=raw.slice(0,300000);
+    return Object.assign({},m,{raw});
+  });
+}
+$('#chat-attach-btn').onclick=()=>$('#chat-file').click();
+$('#chat-file').onchange=e=>{ attAdd(e.target.files); e.target.value=''; };
+$('#chat-atch').addEventListener('click',e=>{
+  const x=e.target.closest('[data-att]'); if(!x) return;
+  CHAT.attach.splice(+x.dataset.att,1);
+  attAutoCompress();                        // 删掉附件后重算：可能自动"解压"回原文
+});
+$('#chat-ctx').addEventListener('click',e=>{
+  if(!e.target.closest('[data-zipsw]')) return;
+  ATT_COMPRESS_ON=!ATT_COMPRESS_ON;
+  try{ localStorage.setItem(ATT_ZIP_KEY,ATT_COMPRESS_ON?'1':'0'); }catch(_){}
+  attAutoCompress();
+});
+(function(){
+  const c=$('#chat-composer'); if(!c) return;
+  const tip=$('#chat-dragtip');
+  const stop=e=>{ e.preventDefault(); e.stopPropagation(); };
+  let depth=0;
+  const reset=()=>{ depth=0; c.classList.remove('dragover'); c.classList.remove('dragover-bad');
+                    if(tip) tip.style.display='none'; };
+  c.addEventListener('dragenter',e=>{ stop(e); depth++; c.classList.add('dragover'); });
+  c.addEventListener('dragover',e=>{
+    stop(e);
+    const dt=e.dataTransfer; if(!dt) return;
+    try{ dt.dropEffect='copy'; }catch(_){}
+    /* 悬停阶段就告诉你"这个格式不行"，不用等松手才弹窗 */
+    let bad=false;
+    try{
+      const items=[].slice.call(dt.items||[]);
+      for(let i=0;i<items.length;i++){
+        if(items[i].kind==='file'&&attMimeBad(items[i].type)){ bad=true; break; }
+      }
+    }catch(_){}
+    c.classList.toggle('dragover-bad',bad);
+    if(tip){
+      tip.style.display='block';
+      tip.classList.toggle('bad',bad);
+      tip.textContent=bad?'这种格式不支持，只收纯文本和图片':'松开添加到对话';
+    }
+  });
+  c.addEventListener('dragleave',e=>{ stop(e); if(--depth<=0) reset(); });
+  c.addEventListener('drop',e=>{
+    stop(e); reset();
+    const dt=e.dataTransfer; if(!dt) return;
+    const files=[].slice.call(dt.files||[]);
+    if(files.length){ attAdd(files); return; }
+    const t=dt.getData('text/plain');        // 从记事本等处直接拖选中的文字
+    if(t) attAddTxt(t);
+  });
+})();
+attLoadCtx();          // 启动时读一次真实上下文，决定"一半"到底是多少
+$('#chat-input').addEventListener('paste',e=>{
+  const cd=e.clipboardData; if(!cd) return;
+  const items=[].slice.call(cd.items||[]);
+  const imgs=items.filter(it=>it.kind==='file'&&/^image\//.test(it.type||'')).map(it=>it.getAsFile()).filter(Boolean);
+  if(imgs.length){ e.preventDefault(); attAdd(imgs); return; }   // 截图直接粘贴成附件
+  /* 超长纯文本：自动改成附件——只有附件才会被自动压缩。
+     否则它会以"手打内容"的身份原样发出去，直接撞上下文上限（用户侧只看到 502）。 */
+  const txt=cd.getData('text/plain')||'';
+  if(txt&&attTokens(txt)>attPasteAsAttach()){
+    e.preventDefault();
+    const tk=attTokens(txt);
+    attAddTxt(txt,'粘贴文本-'+new Date().toTimeString().slice(0,5)+'.txt');
+    setChatStat('已把超长文本（约 '+tk.toLocaleString()+' token）转为附件 —— 这样才会被自动压缩；不需要可点 × 移除');
+    return;
+  }
+  /* 普通长度的粘贴照旧，交给 textarea 自己处理 */
+});
+/* 输入框内容变化 → 刷新上下文仪表（debounce：重算要扫全部历史，别每次按键都跑） */
+let _attTypedTick=null;
+$('#chat-input').addEventListener('input',()=>{
+  clearTimeout(_attTypedTick);
+  _attTypedTick=setTimeout(()=>{ attCtxRender(); },400);
+});
+
+async function sendChat(reuse){
+  if(CHAT.busy) return;
+  sessBound();          // 先确保 CHAT.msgs 真的指向「当前会话」的数组，别写进游离数组
+  /* 发送前按最新历史重算自动压缩：历史变长可能触发压缩，历史变短会自动"解压"回原文 */
+  if(CHAT.attach.some(x=>x.kind==='text')) attAutoCompress();
+  const ta=$('#chat-input');
+  /* ===== 编辑模式：改的是「已经发出去」的某条消息 =====
+     改完 → 这条**之后**的对话全部作废 → 用改完的历史重发（不再追加新消息）。 */
+  if(CHAT.editing!=null){
+    const idx=CHAT.editing, tgt=CHAT.msgs[idx];
+    if(!tgt||tgt.role!=='user'){ CHAT.editing=null; chatEditUI(false); }
+    else{
+      const nv=ta.value.trim();
+      if(!nv){ setChatStat('修改后的内容不能为空'); return; }
+      const cut=CHAT.msgs.length-idx-1;
+      CHAT.msgs.splice(idx+1);                 // 之后的作废
+      tgt.content=nv;
+      tgt.raw=chatRebuildRaw(tgt.raw,nv);      // 文字换了，原来带的图片/文档附件保留
+      tgt.ts=Date.now();
+      CHAT.editing=null; ta.value='';
+      chatEditUI(false);
+      renderMsgs();
+      reuse=true;                              // 用改完的历史重发
+      if(cut) setChatStat('已作废之后的 '+cut+' 条，用新内容重新生成…');
+    }
+  }
+  /* ===== 发送前的最后一道闸 =====
+     估算总量顶到模型上限时**不要发**：上游会回 400 exceed_context_size，
+     经过网关到前端只剩一个 502，用户完全看不出原因。
+     最容易绕过保护的是**直接往输入框粘的大段文本**——它不是附件，不会被压缩。 */
+  const stSend=attContextStat();
+  if(stSend.total>=ATT_CTX){
+    const parts='系统提示 '+stSend.sys.toLocaleString()
+      +' + 历史 '+stSend.hist.toLocaleString()
+      +(stSend.typed?(' + 输入框 '+stSend.typed.toLocaleString()):'')
+      +' + 附件 '+stSend.doc.toLocaleString()
+      +' = '+stSend.total.toLocaleString()+'，已达到模型上限 '+ATT_CTX.toLocaleString();
+    const how=(stSend.typed>Math.floor(attLimit()*0.5))
+      ? '\n\n⚠ 大头来自**输入框里直接粘贴的长文本**——它算"手打内容"，不参与自动压缩。\n'
+        +'解决：把这段内容改成**文件拖入**（或先删掉输入框内容，再用 📎 附件添加），附件才会被自动压缩。'
+      : '\n\n建议：把「上下文轮数」调小，或清空历史对话后重试。';
+    setChatStat('⛔ 已阻止发送：估算上下文 '+stSend.total.toLocaleString()+' ≥ 上限 '+ATT_CTX.toLocaleString());
+    alert('⛔ 已阻止本次发送（否则会直接报错——就是上次那个 502 的真身）。\n\n'+parts+how);
+    return;
+  }
+  if(!reuse){
+    const typed=ta.value.trim();
+    const docs=CHAT.attach.filter(x=>x.kind==='text');
+    const imgs=CHAT.attach.filter(x=>x.kind==='image');
+    if(!typed&&!CHAT.attach.length) return;
+    /* content 恒为纯文本：附件名占一行，历史里一眼能看出「这条带了什么」。
+       raw 才是真正发给模型的（带图片时是 OpenAI 多模态 content 数组）。 */
+    const names=CHAT.attach.map(x=>(x.kind==='image'?'[图] ':'[文档] ')+x.name).join('\n');
+    const content=[typed,names].filter(Boolean).join('\n\n');
+    let raw=null;
+    if(imgs.length){
+      const parts=[];
+      if(typed) parts.push({type:'text',text:typed});
+      if(names) parts.push({type:'text',text:names});
+      if(docs.length) parts.push({type:'text',text:attToText()});
+      imgs.forEach(im=>parts.push({type:'image_url',image_url:{url:im.url}}));
+      raw=parts;
+    }else if(docs.length){
+      raw=content+'\n\n'+attToText();
+    }
+    const um={role:'user',content:content,ts:Date.now()};
+    if(raw) um.raw=raw;
+    CHAT.msgs.push(um);
+    attClear();
+    ta.value='';
+    renderMsgs();
+  }
+  if(!CHAT.msgs.length) return;
+
+  /* 本地目标：先确保引擎真的起来了（会自动互斥停掉绘图引擎） */
+  if(CHAT.target==='local'){
+    const e=(ENG_STATUS.engines||[]).filter(x=>x.id==='llm')[0]||{};
+    if(!e.running){
+      setChatStat('本地引擎未启动，正在拉起（会先关掉绘图引擎）…');
+      const ok=await startEngine('llm');
+      if(!ok){ setChatStat(''); return; }
+      const ready=await waitReady('llm',420);
+      if(!ready){ setChatStat('本地引擎启动失败，看「检测运行状态」或设置页日志'); return; }
+    }
+  }
+
+  const sys=(CHAT.params.system||'').trim();
+  const turns=Math.max(1,+CHAT.params.turns||12);
+  const hist=CHAT.msgs.filter(m=>!m.err&&(m.role==='user'||m.role==='assistant')).slice(-turns*2);
+  let messages=hist.map(m=>({role:m.role,content:m.raw||m.content}));
+  if(sys) messages=[{role:'system',content:sys}].concat(messages);
+
+  const body={target:CHAT.target,model:CHAT.model[CHAT.target]||'',messages,
+    temperature:+CHAT.params.temperature,top_p:+CHAT.params.top_p,max_tokens:+CHAT.params.max_tokens,
+    thinking:!!CHAT.params.thinking};
+
+  CHAT.busy=true;
+  $('#chat-send').disabled=true; $('#chat-stop').disabled=false;
+  const node=addStreamNode();
+  const statEl=node.closest('.bd').querySelector('.mstat');
+  CHAT.ctrl=new AbortController();
+  let acc='',chunkN=0,t0=performance.now(),tFirst=null,errMsg='',thinkTxt='',thinkEl=null;
+  let usage=null,timings=null,tpsLive=null;
+  /* 流式期间的实时统计：每 200ms 刷一次「已用 Xs · N 字 · Y 字/s」。
+     速度用**最近约 2.5 秒的滑动窗口**算，不用全程平均 —— 全程平均在开头会被拉低、
+     看起来像"越跑越慢"，观感很差。 */
+  const win=[];
+  const liveTick=setInterval(()=>{
+    const el=(performance.now()-t0)/1000;
+    win.push({t:el,c:acc.length});
+    while(win.length>2&&el-win[0].t>2.5) win.shift();
+    let tps=null;
+    if(win.length>1){
+      const dt=win[win.length-1].t-win[0].t, dc=win[win.length-1].c-win[0].c;
+      if(dt>0.4&&dc>0) tps=dc/dt;
+    }
+    tpsLive=tps;
+    if(statEl) statEl.innerHTML=mstatHtml({role:'assistant',stats:{total:el,
+      ttf:tFirst?((tFirst-t0)/1000):null,chars:acc.length,tps:tps}},true);
+  },200);
+  setChatStat('生成中…');
+  try{
+    const r=await fetch('/api/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body),signal:CHAT.ctrl.signal});
+    if(!r.ok){
+      /* 后端会把上游的真实原因放在 error 字段里（如「request (93597 tokens) exceeds the
+         available context size (65536 tokens)」）。只显示状态码的话用户只看到一个 502，
+         完全无从下手——这正是上次"报 502"却查不出原因的根本原因。 */
+      let detail='';
+      try{
+        const t=await r.text();
+        try{ detail=(JSON.parse(t)||{}).error||t; }catch(_){ detail=t; }
+      }catch(_){}
+      throw new Error('HTTP '+r.status+(detail?('｜'+String(detail).slice(0,400)):''));
+    }
+    if(!r.body) throw new Error('浏览器不支持流式读取');
+    const reader=r.body.getReader(), dec=new TextDecoder('utf-8');
+    let buf='', done=false;
+    while(!done){
+      const {value,done:d}=await reader.read();
+      if(d) break;
+      buf+=dec.decode(value,{stream:true});
+      let i;
+      while((i=buf.indexOf('\n\n'))>=0){
+        const blk=buf.slice(0,i); buf=buf.slice(i+2);
+        const line=blk.split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trim()).join('');
+        if(!line) continue;
+        if(line==='[DONE]'){ done=true; break; }
+        let j; try{ j=JSON.parse(line); }catch(e){ continue; }
+        if(j.error) throw new Error(j.error);
+        /* llama.cpp 的收尾统计：usage=token 数；timings=吞吐（predicted_per_second / cache_n）。
+           要后端带 stream_options.include_usage + timings_per_token 才会出现，拿不到就退化用字数。 */
+        if(j.usage) usage=j.usage;
+        if(j.timings) timings=j.timings;
+        if(j.target) continue;
+        const d2=((j.choices||[{}])[0].delta)||{};
+        // 推理模型（Qwen3.x / R1 等）会先把思考文本流在 reasoning_content 里，
+        // 这一步不显示的话，气泡会长时间空白 → 看起来像卡死。
+        if(d2.reasoning_content){
+          if(tFirst==null) tFirst=performance.now();
+          if(!thinkEl){
+            thinkEl=document.createElement('details');
+            thinkEl.className='think'; thinkEl.open=true;
+            thinkEl.innerHTML='<summary>思考过程…</summary><div class="tk"></div>';
+            node.parentNode.insertBefore(thinkEl,node);
+          }
+          thinkTxt+=d2.reasoning_content;
+          thinkEl.querySelector('summary').textContent='思考过程…（'+thinkTxt.length+' 字）';
+          thinkEl.querySelector('.tk').textContent=thinkTxt;
+          scrollMsgs();
+        }
+        if(d2.content){
+          if(tFirst==null) tFirst=performance.now();
+          acc+=d2.content; chunkN++;
+          node.innerHTML=md(acc)+'<span class="cur"></span>';
+          scrollMsgs();
+        }
+      }
+    }
+  }catch(err){
+    if(err&&err.name==='AbortError'){ errMsg='__stopped__'; }
+    else errMsg=(err&&err.message)||String(err);
+  }finally{
+    clearInterval(liveTick);
+    CHAT.busy=false; $('#chat-send').disabled=false; $('#chat-stop').disabled=true; CHAT.ctrl=null;
+    const reasonOut=thinkTxt.trim();
+    const dtSec=(performance.now()-t0)/1000;
+    const ttSec=(tFirst==null)?null:(tFirst-t0)/1000;
+    /* 要落盘的统计。**必须存进 CHAT.msgs**：renderMsgs 是"从数据重建 DOM"，
+       统计只写在 DOM 里的话，刷新页面 / 切页回来就全没了（旧实现就是这个毛病）。 */
+    const stats={total:+dtSec.toFixed(2), ttf:ttSec==null?null:+ttSec.toFixed(2),
+      chars:acc.length, chunks:chunkN, reason:reasonOut.length,
+      tps:(dtSec>0.15&&acc.length)?+(acc.length/dtSec).toFixed(1):null,
+      model:CHAT.model[CHAT.target]||'', target:CHAT.target};
+    if(usage){
+      if(usage.completion_tokens) stats.ctok=usage.completion_tokens;
+      if(usage.prompt_tokens){
+        stats.ptok=usage.prompt_tokens;
+        CHAT.lastPromptTok=usage.prompt_tokens;   // 记下真实占用，上下文仪表用它校准估算
+        attCtxRender();                            // 拿到真实值后立刻刷新仪表
+      }
+      if(usage.total_tokens)      stats.ttok=usage.total_tokens;
+    }
+    if(timings){
+      if(timings.predicted_per_second) stats.tpsTok=+timings.predicted_per_second.toFixed(1);
+      if(timings.predicted_n&&!stats.ctok) stats.ctok=timings.predicted_n;
+      if(timings.cache_n) stats.cache=timings.cache_n;
+      if(timings.prompt_per_second) stats.ppsTok=Math.round(timings.prompt_per_second);
+    }
+    const pushA=(extra)=>CHAT.msgs.push(Object.assign(
+      {role:'assistant',content:acc,reason:reasonOut,ts:Date.now(),
+       meta:{target:CHAT.target,model:CHAT.model[CHAT.target]},stats:stats},extra||{}));
+    if(errMsg==='__stopped__'){
+      stats.stopped=true;
+      if(acc||reasonOut) pushA();
+      renderMsgs();
+      setChatStat('已停止'+(acc?('（保留已生成的 '+acc.length+' 字）'):''));
+    } else if(errMsg){
+      if(acc||reasonOut) pushA();
+      else pushA({content:'[请求失败] '+errMsg,err:true,reason:''});
+      renderMsgs();
+      setChatStat('请求失败：'+errMsg);
+    } else {
+      if(!acc&&!reasonOut) pushA({content:'（无输出）',reason:''});
+      else pushA();
+      renderMsgs();
+      if(acc||reasonOut){
+        setChatStat(acc.length+' 字 · 用时 '+dtSec.toFixed(1)+'s'
+          +(ttSec!=null?(' · 首字 '+ttSec.toFixed(1)+'s'):'')
+          +(stats.tpsTok?(' · '+stats.tpsTok.toFixed(1)+' tok/s'):'')
+          +(reasonOut?(' · 思考 '+reasonOut.length+' 字'):''));
+      } else setChatStat('上游没有返回内容');
+    }
+    saveChat();
+  }
+}
+$('#chat-send').onclick=()=>sendChat(false);
+$('#chat-input').addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&CHAT.editing!=null){ e.preventDefault(); chatCancelEdit(); return; }
+  if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendChat(false); }
+});
+$('#chat-edit-cancel').onclick=()=>chatCancelEdit();
+$('#chat-stop').onclick=()=>{ if(CHAT.ctrl) CHAT.ctrl.abort(); else setChatStat('已停止'); };
+$('#chat-regen').onclick=async()=>{
+  if(CHAT.busy) return;
+  while(CHAT.msgs.length&&CHAT.msgs[CHAT.msgs.length-1].role==='assistant') CHAT.msgs.pop();
+  if(!CHAT.msgs.length) return;
+  renderMsgs(); await sendChat(true);
+};
+$('#chat-clear').onclick=()=>{
+  if(!CHAT.msgs.length){ setChatStat('当前对话是空的'); return; }
+  if(!confirm('清空「'+sessTitle(sessNow())+'」的消息？（对话本身保留在左侧列表里）')) return;
+  chatCancelEdit();                        // 顺带退出编辑模式，否则会留下一个悬空的 editing 索引
+  /* 必须用 length=0 就地清空：CHAT.msgs 是当前会话 msgs 数组的**引用**，
+     重新赋值会把引用断开，之后 push 的内容就落不进这个会话了。 */
+  CHAT.msgs.length=0;
+  const s=sessNow(); if(s){ s.title=''; s.upd=Date.now(); }
+  renderMsgs(); setChatStat('已清空'); saveChat();
+};
+$('#chat-new').onclick=()=>newSession();
+$('#chat-hist').onclick=()=>toggleChatHist();
+$('#chat-toimg').onclick=()=>{
+  const last=[...CHAT.msgs].reverse().filter(m=>m.role==='assistant'&&!m.err)[0];
+  if(!last){ setChatStat('还没有可转换的回答'); return; }
+  const t2i=$('#t2i-prompt');
+  const txt=last.content.trim().replace(/\s*\n+\s*/g,'，').slice(0,1200);
+  t2i.value=txt;
+  setOptProv('gemini');
+  $$('.nitem').forEach(x=>x.classList.remove('active'));
+  const n=$$('.nitem').filter(x=>x.dataset.page==='txt2img')[0];
+  if(n) n.classList.add('active');
+  $$('.page').forEach(p=>p.classList.remove('on'));
+  $('#p-txt2img').classList.add('on'); CURPAGE='txt2img';
+  logTo('t2i-log','已从对话转入提示词（'+txt.length+' 字）。可直接生成，或点「结构化描述（AI）」润色成绘图向提示词。');
+  setChatStat('已转到文生图');
+};
+$('#chat-start').onclick=()=>startEngine('llm');
+$('#chat-stopeng').onclick=()=>stopEngine('llm');
+$('#chat-detect').onclick=()=>$('#eb-detect').click();
+$('#chat-params').onclick=()=>{
+  const r=$('#chat-paramrow');
+  const on=r.style.display!=='none';
+  r.style.display=on?'none':'';
+  $('#chat-params').textContent=on?'参数 ▾':'参数 ▴';
+};
+['temp:temperature','topp:top_p','maxtok:max_tokens','turns:turns'].forEach(p=>{
+  const [id,key]=p.split(':');
+  const el=$('#chat-'+id);
+  if(el) el.addEventListener('change',()=>{
+    let v=+el.value;
+    /* max_tokens 不能超过引擎的单次生成上限（-n），否则会被引擎**静默截断**，
+       表现为"写到一半突然停了"却没有任何提示。这里直接钳回去并说明原因。 */
+    if(key==='max_tokens'&&v>ATT_MAX_OUT){
+      v=ATT_MAX_OUT; el.value=v;
+      setChatStat('已调到引擎上限 '+ATT_MAX_OUT+'（llama 的 -n），再高也会被截断');
+    }
+    CHAT.params[key]=v; saveChat();
+  });
+});
+const thinkToggle=$('#think-toggle');
+function setThinking(on){
+  if(thinkToggle&&thinkToggle.disabled) return;  // 锁定模型不可改
+  on=!!on;
+  CHAT.params.thinking=on;
+  if(thinkToggle){ thinkToggle.classList.toggle('on',on); thinkToggle.setAttribute('aria-checked',on?'true':'false'); }
+  saveChat();
+}
+if(thinkToggle) thinkToggle.onclick=()=>setThinking(!CHAT.params.thinking);
+$('#chat-sys').addEventListener('change',()=>{ CHAT.params.system=$('#chat-sys').value; saveChat(); });
+
+function applyChatParams(){
+  $('#chat-temp').value=CHAT.params.temperature;
+  $('#chat-topp').value=CHAT.params.top_p;
+  $('#chat-maxtok').value=CHAT.params.max_tokens;
+  $('#chat-turns').value=CHAT.params.turns;
+  $('#chat-sys').value=CHAT.params.system||'';
+  if(thinkToggle) setThinking(!!CHAT.params.thinking);
+}
+function defaultThinking(){
+  /* Qwen3.8 系本地模型默认开思维链（前缀匹配，兼容长短别名）；其它模型保持用户当前选择 */
+  if(CHAT.target==='local' && (CHAT.model[CHAT.target]||'').indexOf('Qwen3.8-27B')===0){
+    CHAT.params.thinking=true;
+  }
+}
+/* ---------------- 对话：多会话（左侧历史列） ----------------
+   存储走 /api/store（后端 JSON 落盘），key=chat_sessions。
+   旧的单会话 key=chat_history 会自动迁移成第一条，不丢历史。
+   内存里 CHAT.msgs 始终**指向当前会话的 msgs 数组**，push 后 saveChat 即可落盘。 */
+const SESS_MAX=60, SESS_MSG_MAX=200;
+function sessNow(){ return CHAT.sessions.filter(s=>s.id===CHAT.cur)[0]||null; }
+function sessTitle(s){
+  if(s&&s.title) return s.title;
+  const u=((s&&s.msgs)||[]).filter(m=>m.role==='user')[0];
+  const t=((u&&u.content)||'').replace(/\s+/g,' ').trim();
+  return t? t.slice(0,24)+(t.length>24?'…':'') : '新对话';
+}
+function sessTime(ts){
+  const d=new Date(ts||Date.now());
+  return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+}
+function sessBound(){                    // 绑定 CHAT.msgs 到当前会话，缺会话就新建
+  let s=sessNow();
+  if(!s){
+    s={id:'s-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6),
+       title:'',ts:Date.now(),upd:Date.now(),target:CHAT.target,model:{},
+       params:Object.assign({},CHAT.params),msgs:[]};
+    CHAT.sessions.unshift(s); CHAT.cur=s.id;
+  }
+  CHAT.msgs=s.msgs;
+  return s;
+}
+function newSession(){
+  const cur=sessNow();
+  if(cur&&!(cur.msgs||[]).length){       // 当前已经是空会话 → 复用，别堆一堆空的
+    CHAT.cur=cur.id; CHAT.msgs=cur.msgs;
+    renderSessions(); renderMsgs(); setChatStat('已是新对话'); return cur;
+  }
+  if(CHAT.busy){ setChatStat('正在生成，稍后再新建'); return null; }
+  const s={id:'s-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6),
+    title:'',ts:Date.now(),upd:Date.now(),target:CHAT.target,model:{},
+    params:Object.assign({},CHAT.params),msgs:[]};
+  CHAT.sessions.unshift(s);
+  if(CHAT.sessions.length>SESS_MAX) CHAT.sessions.length=SESS_MAX;
+  CHAT.cur=s.id; CHAT.msgs=s.msgs;
+  renderSessions(); renderMsgs(); setChatStat('已新建对话'); saveChat();
+  return s;
+}
+function switchSession(id){
+  if(id===CHAT.cur) return;
+  if(CHAT.busy){ setChatStat('正在生成，稍后再切换'); return; }
+  chatCancelEdit();          // 切换会话时退出编辑模式：editing 索引只对旧会话有意义
+  const s=CHAT.sessions.filter(x=>x.id===id)[0];
+  if(!s) return;
+  CHAT.cur=id; CHAT.msgs=s.msgs;
+  if(s.target) CHAT.target=s.target;
+  if(s.model&&Object.keys(s.model).length) CHAT.model=Object.assign(CHAT.model,s.model);
+  if(s.params) CHAT.params=Object.assign(CHAT.params,s.params);
+  applyChatParams(); renderTargetSelect();
+  renderSessions(); renderMsgs();
+  setChatStat('已切换到「'+sessTitle(s)+'」（'+(s.msgs||[]).length+' 条）');
+}
+function delSession(id,ev){
+  if(ev) ev.stopPropagation();
+  if(CHAT.busy){ setChatStat('正在生成，稍后再删除'); return; }
+  const s=CHAT.sessions.filter(x=>x.id===id)[0];
+  if(!s) return;
+  if(!confirm('删除对话「'+sessTitle(s)+'」？此操作不可撤销。')) return;
+  CHAT.sessions=CHAT.sessions.filter(x=>x.id!==id);
+  if(CHAT.cur===id){
+    if(CHAT.sessions.length){ CHAT.cur=CHAT.sessions[0].id; CHAT.msgs=CHAT.sessions[0].msgs; }
+    else { newSession(); }
+  }
+  renderSessions(); renderMsgs(); saveChat(); setChatStat('已删除对话');
+}
+function renameSession(id){
+  const s=CHAT.sessions.filter(x=>x.id===id)[0];
+  if(!s) return;
+  const cur=sessTitle(s);
+  const t=prompt('对话标题（留空＝按第一句话自动命名）',cur==='新对话'?'':cur);
+  if(t===null) return;
+  s.title=t.trim();
+  renderSessions(); saveChat();
+}
+/* 左侧历史列表：按「今天 / 昨天 / 更早」分组，跟大多数网页一样 */
+function renderSessions(){
+  const box=$('#sess-list'); if(!box) return;
+  const now=new Date(); const d0=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  const gs=[['今天',d0],['昨天',d0-86400000],['更早',0]];
+  let html='';
+  if(!CHAT.sessions.length) html='<div class="sempty">还没有对话</div>';
+  gs.forEach(([name,from],gi)=>{
+    const to=gi===0? Infinity : gs[gi-1][1];
+    const arr=CHAT.sessions.filter(s=>{const u=s.upd||s.ts||0; return u>=from&&u<to;});
+    if(!arr.length) return;
+    html+='<div class="sgroup">'+name+'</div><div class="slist">';
+    arr.forEach(s=>{
+      const n=(s.msgs||[]).length;
+      html+='<div class="sitem'+(s.id===CHAT.cur?' on':'')+'" data-sid="'+s.id+'" title="双击重命名">'
+        +'<span class="st1">'+esc(sessTitle(s))+'</span>'
+        +'<span class="st2">'+(n?sessTime(s.upd||s.ts):'空')+'</span>'
+        +'<button class="sdel" data-del="'+s.id+'" title="删除这个对话">✕</button></div>';
+    });
+    html+='</div>';
+  });
+  box.innerHTML=html;
+}
+if($('#sess-list')){
+  $('#sess-list').addEventListener('click',e=>{
+    const d=e.target.closest('[data-del]');
+    if(d){ delSession(d.dataset.del,e); return; }
+    const it=e.target.closest('[data-sid]');
+    if(it) switchSession(it.dataset.sid);
+  });
+  $('#sess-list').addEventListener('dblclick',e=>{
+    const it=e.target.closest('[data-sid]');
+    if(it) renameSession(it.dataset.sid);
+  });
+}
+
+async function saveChat(){
+  const s=sessNow();
+  if(s){
+    /* ⚠️ 必须**原地**维护 s.msgs，不能写成 `s.msgs=(CHAT.msgs||[]).slice(...)`。
+       那样会把会话的 msgs 换成一个新数组，而 CHAT.msgs 仍旧指向老数组 —— 两个引用分家，
+       之后往 CHAT.msgs push 的消息全写进游离数组：新会话列表里看着是空的、刷新就丢。
+       本机 Playwright 实测复现：newSession() 后 push 的消息进不了列表。
+       这里反过来做：以 CHAT.msgs 的内容为准原地灌进 s.msgs，再把 CHAT.msgs 重新绑回去。 */
+    if(CHAT.msgs!==s.msgs){
+      s.msgs=s.msgs||[];
+      s.msgs.length=0;
+      (CHAT.msgs||[]).forEach(m=>s.msgs.push(m));
+    }
+    CHAT.msgs=s.msgs;
+    if(s.msgs.length>SESS_MSG_MAX) s.msgs.splice(0,s.msgs.length-SESS_MSG_MAX);
+    s.target=CHAT.target; s.model=CHAT.model;
+    s.params=Object.assign({},CHAT.params);
+    s.upd=Date.now();
+  }
+  try{
+    await ebPost('/api/store',{key:'chat_sessions',value:{
+      cur:CHAT.cur,
+      list:CHAT.sessions.slice(0,SESS_MAX).map(x=>Object.assign({},x,{
+        msgs:attSlimMsgs((x.msgs||[]).slice(-SESS_MSG_MAX))})),
+      v:2}});
+  }catch(e){}
+  renderSessions();
+}
+async function loadChat(){
+  let has=false;
+  try{
+    const d=await ebGet('/api/store?key=chat_sessions');
+    const v=d&&d.value;
+    if(v&&v.list&&v.list.length){
+      CHAT.sessions=v.list.map(s=>{
+        const o=Object.assign({},s,{msgs:s.msgs||[]});
+        /* 老会话的 params 是用「当时的默认值」存盘的（max_tokens 曾经是 2048）。
+           如果不在这里升级，改默认值对老会话**永远不生效**——恢复出来还是 2048，
+           这正是用户遇到"明明改成了 7000，输出还是 2048"的原因。 */
+        if(o.params&&o.params.max_tokens===2048) o.params.max_tokens=CHAT.params.max_tokens;
+        return o;
+      });
+      CHAT.cur=v.cur||CHAT.sessions[0].id;
+      has=true;
+    }
+  }catch(e){}
+  if(!has){                              // 迁移单会话时代的 chat_history
+    try{
+      const d2=await ebGet('/api/store?key=chat_history');
+      const v2=d2&&d2.value;
+      if(v2&&v2.msgs&&v2.msgs.length){
+        const s={id:'s-legacy',title:'（旧记录）',ts:Date.now(),upd:Date.now(),
+          target:v2.target||CHAT.target,model:v2.model||{},
+          params:Object.assign({},v2.params||{}),msgs:v2.msgs};
+        CHAT.sessions=[s]; CHAT.cur=s.id;
+      }
+    }catch(e){}
+  }
+  const s=sessBound();
+  if(s.target) CHAT.target=s.target;
+  if(s.model&&Object.keys(s.model).length) CHAT.model=Object.assign(CHAT.model,s.model);
+  if(s.params) CHAT.params=Object.assign(CHAT.params,s.params);
+  renderSessions();
+  applyChatParams();
+}
+
+/* ---------------- 设置页 ---------------- */
+let SETTINGS=null;
+function ebRow(lbl,html){ return '<div class="engrow"><span class="lbl">'+lbl+'</span>'+html+'</div>'; }
+async function loadSettings(){
+  try{ SETTINGS=await ebGet('/api/settings'); }catch(e){ return; }
+  $('#set-exclusive').value=SETTINGS.exclusive||'all';
+  $('#set-close').value=(SETTINGS.app&&SETTINGS.app.close_action)||'stop_engines';
+  $('#set-cfg').textContent=SETTINGS.config_path||'–';
+  $('#set-home').textContent=SETTINGS.home_dir||'–';
+  if($('#set-comfy-url')) $('#set-comfy-url').value=SETTINGS.comfy_url||'';
+  if($('#set-h3-url')) $('#set-h3-url').value=SETTINGS.h3_url||'';
+  renderSetModels(); renderSetEngines(); renderSetTargets(); renderDeps();
+  const sel=$('#set-logsel');
+  const es=SETTINGS.engines||{};
+  const keys=Object.keys(es);
+  sel.innerHTML=keys.map(k=>'<option value="'+esc(k)+'">'+esc(es[k].name||k)+' 日志</option>').join('');
+  // 默认选中「正在运行的引擎」，都没有就选 LLM——选 comfy 而它没跑过会显示「暂无内容」，像坏了
+  const run=(ENG_STATUS.running||[]).filter(k=>keys.indexOf(k)>=0);
+  const pref=run[0] || (keys.indexOf('llm')>=0?'llm':'') || keys[0] || '';
+  if(pref) sel.value=pref;
+}
+function renderDeps(){
+  const el=$('#set-deps'); if(!el) return;
+  const d=(SETTINGS&&SETTINGS.deps)||{};
+  const cc=d.comfy_cli||{};
+  el.innerHTML=cc.ok
+    ? '✅ <b>comfy-cli</b> 正常 · '+esc(cc.detail||'')
+    : '❌ <b>comfy-cli 缺失</b> · '+esc(cc.detail||'')+(cc.error?(' · <span class="mono">'+esc(cc.error)+'</span>'):'')
+      +'<br>文生图/图生图会失败。修法：在<b>跑后端的那个 Python</b> 里执行 <code>pip install comfy-cli</code>'
+      +'（就是 启动Comfy第三方前端.bat 实际用的那个 Python；装到 ComfyUI 自己的 venv 里<b>没用</b>）。';
+  el.style.color=cc.ok?'':'var(--red)';
+}
+function renderSetModels(){
+  const ms=SETTINGS.llm_models||[];
+  $('#set-models').innerHTML=ms.length?ms.map(m=>{
+    const miss=!m.exists;
+    return '<div class="modcard'+(m.active?' on':'')+(miss?' missing':'')+'">'
+    +'<span class="nm mono">'+esc(m.name)+(m.subdir?('<span class="hint"> · '+esc(m.subdir)+'</span>'):'')+'</span>'
+    +'<span class="sz">'+m.size_gb+' GB</span>'
+    +(m.active?'<span class="hint">当前使用</span>'
+      : miss?'<span class="hint bad">文件缺失（可能已移走）</span>'
+      :'<button class="ghost mini" data-use="'+esc(m.path)+'">设为对话模型</button>')
+    +'</div>';
+  }).join('')
+    : '<p class="hint">没扫到 gguf。把模型放进 <code>X:\\你的llama.cpp\\models</code>，或用下面的「创建链接」把外部目录零拷贝挂进来。</p>';
+  $('#set-models').querySelectorAll('[data-use]').forEach(b=>b.onclick=()=>useLlmModel(b.dataset.use));
+  $('#set-vramest').textContent=SETTINGS.llm_vram_est?('当前模型预计占用显存约 '+SETTINGS.llm_vram_est+' GB'):'';
+}
+async function useLlmModel(p){
+  const r=await ebPost('/api/engine/save',{engines:{llm:{model:p,alias:''}}});
+  $('#set-msg').textContent=r.ok?'已切换对话模型（下次启动该引擎时生效）':('保存失败：'+(r.error||''));
+  await loadSettings(); refreshEngines(true);
+}
+function renderSetEngines(){
+  const es=SETTINGS.engines||{};
+  $('#set-engines').innerHTML=Object.keys(es).map(k=>{
+    const e=es[k]||{};
+    let extra='';
+    if(k==='llm'){
+      extra=ebRow('多模型 router','<select data-e="'+k+'.router"><option value="0"'+(!e.router?' selected':'')+'>否 · 单模型模式（推荐）</option><option value="1"'+(e.router?' selected':'')+'>是 · --models-dir</option></select>')
+        +ebRow('对话模型','<input data-e="'+k+'.model" value="'+esc(e.model||'')+'">')
+        +ebRow('对话别名','<input data-e="'+k+'.alias" value="'+esc(e.alias||'')+'" placeholder="留空＝用文件名">')
+        +ebRow('上下文 ctx','<input type="number" data-e="'+k+'.ctx" value="'+(e.ctx||'')+'">')
+        +ebRow('生成上限 -n','<input type="number" data-e="'+k+'.max_predict" value="'+(e.max_predict||'')+'">')
+        +ebRow('模型库目录','<input data-e="'+k+'.models_dir" value="'+esc(e.models_dir||'')+'">');
+      extra+='<p class="hint">⚠️ 本机实测：router 模式下 <code>presets.ini</code> 的模型段若只写 <code>ctx-size</code> 不写 <code>model=</code>，会覆盖掉自动发现的路径，导致子进程没有 <code>-m</code>、永久卡在加载。保持「否」最稳。</p>';
+    }
+    return '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px;background:var(--panel2)">'
+      +'<div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px;color:var(--teal)">'
+      +esc(e.name||k)
+      +'<label style="margin:0 0 0 auto;color:var(--muted);font-weight:400;font-size:11.5px">'
+      +'<input type="checkbox" data-e="'+k+'.enabled" '+(e.enabled?'checked':'')+' style="width:auto;vertical-align:-2px"> 启用</label></div>'
+      +ebRow('可执行文件','<input data-e="'+k+'.exe" value="'+esc(e.exe||'')+'">')
+      +ebRow('工作目录','<input data-e="'+k+'.cwd" value="'+esc(e.cwd||'')+'">')
+      +ebRow('端口','<input type="number" data-e="'+k+'.port" value="'+(e.port||'')+'">')
+      +extra
+      +(e.hint?('<div class="hint" style="margin-top:5px">'+esc(e.hint)+'</div>'):'')
+      +'</div>';
+  }).join('');
+}
+$('#set-save-engines').onclick=async()=>{
+  const out={};
+  $$('#set-engines [data-e]').forEach(el=>{
+    const dot=el.dataset.e.lastIndexOf('.');
+    const k=el.dataset.e.slice(0,dot), f=el.dataset.e.slice(dot+1);
+    out[k]=out[k]||{};
+    if(el.type==='checkbox') out[k][f]=el.checked;
+    else if(f==='router') out[k][f]=el.value==='1';
+    else if(f==='port'||f==='ctx'||f==='max_predict'){ const n=parseInt(el.value,10); out[k][f]=isNaN(n)?null:n; }
+    else out[k][f]=el.value;
+  });
+  const r=await ebPost('/api/engine/save',{engines:out});
+  $('#set-eng-msg').textContent=r.ok?'已保存到配置文件':'保存失败：'+(r.error||'');
+  await loadSettings(); refreshEngines(true);
+};
+/* ComfyUI 地址：本机 ↔ 外部（带 Basic 认证）。保存后立刻连一次，填错当场就知道。 */
+if($('#set-save-comfy')) $('#set-save-comfy').onclick=async()=>{
+  const btn=$('#set-save-comfy');
+  btn.disabled=true; $('#set-comfy-msg').textContent='正在保存并连接…';
+  try{
+    const r=await ebPost('/api/comfy/save',{
+      comfy_url:($('#set-comfy-url').value||'').trim(),
+      h3_url:($('#set-h3-url').value||'').trim()});
+    if(!r.ok){ $('#set-comfy-msg').textContent='保存失败：'+(r.error||''); return; }
+    if(r.settings) SETTINGS=r.settings;
+    $('#set-comfy-url').value=(SETTINGS&&SETTINGS.comfy_url)||'';
+    $('#set-h3-url').value=(SETTINGS&&SETTINGS.h3_url)||'';
+    $('#set-comfy-msg').textContent = r.online
+      ? ('✅ 已保存，连接正常'+((r.devices&&r.devices.length)?('（'+r.devices.join(' / ')+'）'):''))
+      : ('⚠️ 已保存，但连不上：'+(r.error||'未知'));
+    refreshEngines(true); refreshModels(CURPAGE);
+  }catch(e){ $('#set-comfy-msg').textContent='保存失败：'+e; }
+  finally{ btn.disabled=false; }
+};
+function renderSetTargets(){
+  const ts=SETTINGS.chat_targets||[];
+  $('#set-targets').innerHTML=ts.map(t=>
+    '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px;background:var(--panel2)">'
+    +'<div style="font-weight:600;font-size:12.5px;color:var(--teal)">'+esc(t.name)
+    +'<span class="hint" style="font-weight:400"> '+esc(t.id)+' · '+esc(t.group)+(t.engine?(' · 依赖引擎 '+esc(t.engine)):'')+'</span></div>'
+    +ebRow('api_url','<input data-t="'+esc(t.id)+'.api_url" value="'+esc(t.api_url||'')+'">')
+    +ebRow('模型名','<input data-t="'+esc(t.id)+'.model" value="'+esc(t.model||'')+'">')
+    +ebRow('API Key','<input type="password" data-t="'+esc(t.id)+'.api_key" placeholder="'+(t.has_key?'已配置，留空则不改':'未配置')+'">')
+    +'</div>').join('')||'<p class="hint">没有配置任何对话目标。</p>';
+}
+$('#set-save-targets').onclick=async()=>{
+  const out={};
+  $$('#set-targets [data-t]').forEach(el=>{
+    const dot=el.dataset.t.lastIndexOf('.');
+    const k=el.dataset.t.slice(0,dot), f=el.dataset.t.slice(dot+1);
+    const v=el.value.trim();
+    if(f==='api_key'&&!v) return;
+    out[k]=out[k]||{}; out[k][f]=v;
+  });
+  const r=await ebPost('/api/chat/save',{targets:out});
+  $('#set-tgt-msg').textContent=r.ok?'已保存（对话页下拉已刷新）':'保存失败：'+(r.error||'');
+  await loadSettings(); await loadChatModels();
+};
+$('#set-save-app').onclick=async()=>{
+  const r=await ebPost('/api/settings',{exclusive:$('#set-exclusive').value,close_action:$('#set-close').value});
+  $('#set-msg').textContent=r.ok?'已保存（互斥模式立即生效）':'保存失败：'+(r.error||'');
+  await refreshEngines(true);
+};
+$('#set-models-refresh').onclick=async()=>{ await loadSettings(); setChatStat(''); };$('#set-link-btn').onclick=async()=>{
+  const p=$('#set-link-src').value.trim();
+  if(!p){ $('#set-link-msg').textContent='请先填要链接的外部目录或 gguf 路径。'; return; }
+  $('#set-link-msg').textContent='正在创建目录联接…';
+  const r=await ebPost('/api/engine/register_model',{path:p});
+  $('#set-link-msg').innerHTML=r.ok
+    ?('✅ 已链接到 <span class="mono">'+esc(r.link||r.dest||'')+'</span>'+(r.msg?('（'+esc(r.msg)+'）'):''))
+    :('❌ '+(r.error||'创建失败'));
+  await loadSettings(); await loadChatModels();
+};
+$('#set-logload').onclick=async()=>{
+  const id=$('#set-logsel').value||'llm';
+  const n=Math.max(5,Math.min(2000,parseInt($('#set-logn').value,10)||60));
+  const d=await ebGet('/api/engine/log?id='+encodeURIComponent(id)+'&n='+n);
+  $('#set-log').textContent=((d.lines||[]).join('\n'))||('（暂无内容）'+(d.error?(' '+d.error):''));
+  $('#set-log').scrollTop=$('#set-log').scrollHeight;
+};
+$('#set-logopen').onclick=()=>ebPost('/api/reveal',{path:(SETTINGS&&SETTINGS.home_dir)||''}).catch(()=>{});
+
+/* ---------------- 心跳保活（浏览器版）----------------
+   浏览器不像桌面壳有窗口关闭事件，页面关掉后端是不知道的。
+   所以每个页面每 5s 打一次心跳；后端"整张页面注册表都空了"才退出。
+
+   ⚠ 关键：每个标签页有自己的 PAGE_ID，后端**按页面记账**。
+     2026-09-23 起默认用你日常的 Chrome 开普通标签页，很可能同时开着好几个
+     Comfy 第三方前端 页；若还用"一次关闭信标 = 全局死讯"，关掉其中一个就会把
+     还开着的那个一起判死（引擎被误停）。所以：
+       加载时 pageopen 登记 / 心跳带 pid 续期 / pagehide 只注销自己。 */
+let HB_TIMEOUT=45;
+const PAGE_ID=(()=>{ try{ return (window.crypto&&crypto.randomUUID&&crypto.randomUUID())||('p'+Date.now()); }
+                     catch(e){ return 'p'+Date.now()+Math.random().toString(16).slice(2); } })();
+async function hbBeat(){
+  try{
+    const r=await fetch('/api/heartbeat?pid='+encodeURIComponent(PAGE_ID),{cache:'no-store'});
+    if(r.ok){ const j=await r.json(); if(j&&j.timeout) HB_TIMEOUT=j.timeout; }
+  }catch(e){/* 后端没了就是退出流程，忽略 */}
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) hbBeat(); });
+/* 登记本页面身份，让后端知道"这一页还在看"。
+   fetch 默认就是 GET —— 后端 /api/app/pageopen 曾经只挂在 do_POST，
+   于是这一步静默 404 过、注册表一直是空的（靠下面 hbBeat 兜着才没出事）。
+   现在后端 do_GET/do_POST 都收（comfy_studio.py::Handler._page_route）。 */
+try{ fetch('/api/app/pageopen?pid='+encodeURIComponent(PAGE_ID),{method:'GET',cache:'no-store'}).catch(()=>{}); }catch(e){}
+/* 从前进/后退缓存（bfcache）恢复时 pagehide 已经注销过本页，补登记一次。 */
+window.addEventListener('pageshow',e=>{ if(e&&e.persisted) hbBeat(); });
+/* 卸载信标：只注销**本页面**；别的标签页还开着时后端不会退。 */
+window.addEventListener('pagehide',()=>{
+  try{navigator.sendBeacon('/api/app/pageclose?pid='+encodeURIComponent(PAGE_ID),'1');}catch(e){}
+});
+
+/* ---------------- 启动桌面模块 ---------------- */
+(async function initDesktop(){
+  npSet(true);               // 底部运行日志默认展开（约占左栏 1/3）；对话历史随「LLM 对话」点击展开
+  startLogPoll();            // 进度条 + 左栏日志：每 0.8s 拉一次增量
+  await loadChat();          // 先恢复历史，避免被覆盖
+  renderMsgs();
+  updateChatEngineUI();        // 先占位（"正在检测…"），避免标签卡在初始 hardcode 文案
+  await refreshEngines(true);  // 再拿真状态：否则对话页状态行没有数据可读
+  await loadChatModels();      // 会 syncTargetFromSelect → updateChatEngineUI
+  updateChatEngineUI();        // 兜底再刷一次（下拉首次为空时 syncTarget 会提前 return）
+  await loadSettings();
+  hbBeat();                    // 立刻打一次，缩短后端宽限期
+  setInterval(hbBeat,5000);
+  setInterval(refreshEngines,6000);
+  setInterval(loadChatModels,30000);
+})();
+boot();
+bootPathBars();
+const mo=$('#made-open-out'), ma=$('#made-open-arch');
+if(mo) mo.onclick=()=>revealKind('output','',CURPAGE);
+if(ma) ma.onclick=()=>revealKind('archive',CURPAGE,CURPAGE);
+</script>
+</body>
+</html>

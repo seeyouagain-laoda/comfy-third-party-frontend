@@ -1,0 +1,29 @@
+# ---- 运行时目录（保留目录，忽略内容）----
+logs/*
+!logs/.gitkeep
+data/*
+!data/.gitkeep
+output/*
+!output/.gitkeep
+archive/*
+!archive/.gitkeep
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+python/
+
+# ---- 本地配置备份 / 临时文件 ----
+*.bak
+*.bak-*
+*.tmp
+*~
+*.log
+
+# ---- 打包产物 ----
+*.zip
+*.7z
